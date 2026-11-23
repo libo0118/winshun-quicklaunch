@@ -305,6 +305,10 @@ void testThemeAlphaNormalization()
         {QStringLiteral("menuBackground"), QStringLiteral("#CCFFFFFF")},
         {QStringLiteral("divider"), QStringLiteral("#14000000")},
         {QStringLiteral("windowEdge"), QStringLiteral("#26000000")},
+        {QStringLiteral("hover"), QStringLiteral("#0F000000")},
+        {QStringLiteral("pressed"), QStringLiteral("#1A000000")},
+        {QStringLiteral("controlHover"), QStringLiteral("#0D000000")},
+        {QStringLiteral("menuHover"), QStringLiteral("#12000000")},
     };
     const ql::ThemeData normalized = ql::ThemeData::fromAppearance(
         QStringLiteral("zh"), QStringLiteral("light"),
@@ -314,12 +318,22 @@ void testThemeAlphaNormalization()
     for (const QString& hex : {
              normalized.page, normalized.background, normalized.layer,
              normalized.menuBackground, normalized.control,
-             normalized.windowEdge, normalized.divider, normalized.controlBorder}) {
+             normalized.windowEdge, normalized.divider, normalized.controlBorder,
+             normalized.hover, normalized.pressed,
+             normalized.controlHover, normalized.menuHover}) {
         const QColor c(hex);
         QL_CHECK(c.isValid() && c.alpha() == 255);
     }
     QL_CHECK(QColor(normalized.windowEdge).red() >= 180);
     QL_CHECK(QColor(normalized.divider).red() >= 200);
+    for (const QString& hoverHex : {
+             normalized.hover, normalized.pressed,
+             normalized.controlHover, normalized.menuHover}) {
+        QL_CHECK(QColor(hoverHex).red() >= 200);
+    }
+
+    ql::ThemeObject alphaCheckObj;
+    QL_CHECK(alphaCheckObj.withAlpha(QColor(QStringLiteral("#14000000")), 0.8).alpha() <= 20);
 
     const QJsonObject harshLightLook{
         {QStringLiteral("dark"), false},

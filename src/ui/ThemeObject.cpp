@@ -47,7 +47,8 @@ void ThemeObject::update(const ThemeData& data)
 QColor ThemeObject::withAlpha(const QColor& color, qreal alpha) const
 {
     QColor copy = color;
-    copy.setAlphaF(std::clamp(static_cast<double>(alpha), 0.0, 1.0));
+    const double factor = std::clamp(static_cast<double>(alpha), 0.0, 1.0);
+    copy.setAlphaF(std::clamp(copy.alphaF() * factor, 0.0, 1.0));
     return copy;
 }
 

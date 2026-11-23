@@ -308,6 +308,10 @@ struct ThemeData {
         t.windowEdge = blendOverOpaque(t.windowEdge, t.page);
         t.divider = blendOverOpaque(t.divider, t.page);
         t.controlBorder = blendOverOpaque(t.controlBorder, t.page);
+        t.hover = blendOverOpaque(t.hover, t.page);
+        t.pressed = blendOverOpaque(t.pressed, t.page);
+        t.controlHover = blendOverOpaque(t.controlHover, t.layer);
+        t.menuHover = blendOverOpaque(t.menuHover, t.menuBackground);
         if (!t.dark) {
             const QColor pageColor(t.page);
             auto softenIntoPage = [&](QString& hex, int minLightness, double weight) {
@@ -319,6 +323,10 @@ struct ThemeData {
             softenIntoPage(t.windowEdge, 150, 0.22);
             softenIntoPage(t.divider, 190, 0.10);
             softenIntoPage(t.controlBorder, 150, 0.22);
+            softenIntoPage(t.hover, 210, 0.08);
+            softenIntoPage(t.pressed, 195, 0.14);
+            softenIntoPage(t.controlHover, 215, 0.07);
+            softenIntoPage(t.menuHover, 210, 0.08);
         }
         return t;
     }

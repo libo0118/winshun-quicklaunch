@@ -246,7 +246,7 @@ Popup {
                 ? (sw.down ? theme.pressed : (sw.hovered ? theme.accent : theme.accentFill))
                 : (theme.dark
                     ? (sw.down ? theme.pressed : (sw.hovered ? theme.controlHover : theme.control))
-                    : (sw.down ? theme.pressed : (sw.hovered ? theme.hover : theme.sidebarBackground)))
+                    : (sw.down ? theme.pressed : (sw.hovered ? theme.hover : theme.withAlpha(theme.text, 0.12))))
             border.width: sw.checked ? 0 : 1
             border.color: sw.checked ? "transparent" : theme.controlBorder
             Behavior on color { ColorAnimation { duration: 140 } }
@@ -283,7 +283,7 @@ Popup {
                 anchors.topMargin: 2
                 anchors.bottomMargin: 2
                 radius: 6
-                color: sw.rightAligned && sw.hovered ? theme.withAlpha(theme.hover, 0.8) : "transparent"
+                color: sw.rightAligned && sw.hovered ? theme.hover : "transparent"
                 Behavior on color { ColorAnimation { duration: 90 } }
             }
         }
@@ -1007,7 +1007,7 @@ Popup {
                 spacing: 8
 
                 Text {
-                    text: "v0.3.0"
+                    text: "v0.3.1"
                     color: theme.faint
                     font.pixelSize: 11
                     Layout.fillWidth: true
