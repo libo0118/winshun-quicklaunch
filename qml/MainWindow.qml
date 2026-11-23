@@ -115,7 +115,7 @@ ApplicationWindow {
         }
         const choices = controller.categoryChoices
         for (let i = 0; i < choices.length; ++i) {
-            const obj = moveSubItemComp.createObject(moveSubMenu, {
+            const obj = moveSubItemComp.createObject(null, {
                 targetCatId: choices[i].id,
                 targetCatName: choices[i].name
             })
@@ -623,9 +623,9 @@ ApplicationWindow {
 
                                     Rectangle {
                                         visible: isSelected
-                                        width: 2.5
+                                        width: 3
                                         height: 16
-                                        radius: 1.25
+                                        radius: 1.5
                                         color: theme.accent
                                         anchors.left: parent.left
                                         anchors.leftMargin: 3
@@ -830,7 +830,7 @@ ApplicationWindow {
                                             Text {
                                                 text: name
                                                 color: theme.text
-                                                font.pixelSize: 13.5
+                                                font.pixelSize: 14
                                                 font.weight: Font.Medium
                                                 elide: Text.ElideRight
                                                 Layout.maximumWidth: Math.max(80, sNameRow.width - (runAsAdmin ? 24 : 0))
@@ -855,7 +855,7 @@ ApplicationWindow {
                                             Layout.fillWidth: true
                                             text: target + (remark.length > 0 ? " · " + remark : "")
                                             color: theme.subtext
-                                            font.pixelSize: 11.5
+                                            font.pixelSize: 12
                                             elide: Text.ElideRight
                                         }
                                     }
@@ -870,7 +870,7 @@ ApplicationWindow {
                                             anchors.centerIn: parent
                                             text: categoryName
                                             color: theme.subtext
-                                            font.pixelSize: 10.5
+                                            font.pixelSize: 11
                                         }
                                     }
 
@@ -887,7 +887,7 @@ ApplicationWindow {
                                             anchors.centerIn: parent
                                             text: shortcutHint
                                             color: theme.faint
-                                            font.pixelSize: 10.5
+                                            font.pixelSize: 11
                                         }
                                     }
                                 }
@@ -1448,7 +1448,7 @@ ApplicationWindow {
                 Text {
                     text: "热键冲突: " + controller.hotkeyKey
                     color: theme.danger
-                    font.pixelSize: 11.5
+                    font.pixelSize: 12
                     font.weight: Font.Medium
                 }
 

@@ -281,6 +281,13 @@ def run_e2e(exe_path: Path, qt_dir: Path, repo_root: Path) -> None:
             alive = harness.request("query", q_params)
             assert len(alive.get("items", [])) >= 5
 
+            panel_act = harness.request("action", {
+                "command": "ql", "action": "open-panel",
+                "item": {"id": "__open_panel__"}, "text": "",
+            })
+            assert any(e.get("type") == "hide" for e in panel_act.get("effects", [])), panel_act
+            time.sleep(0.5)
+
             cur = harness.event_cursor()
             shut_res = harness.request("shutdown", {}, timeout=3.0)
             assert shut_res == {}, shut_res
@@ -288,7 +295,12 @@ def run_e2e(exe_path: Path, qt_dir: Path, repo_root: Path) -> None:
             exit_code = harness.proc.wait(timeout=3.0)
             assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
             assert not harness.stdout_errors, f"Stdout protocol violations: {harness.stdout_errors}"
-            print("[OK] E2E JSON-RPC test suite passed (11/11 checks)")
+            qml_errors = [
+                ln for ln in harness.stderr_lines
+                if "Failed to load qrc:/" in ln or "QQmlApplicationEngine failed" in ln or "Invalid property assignment" in ln
+            ]
+            assert not qml_errors, f"QML loading errors on stderr: {qml_errors}"
+            print("[OK] E2E JSON-RPC test suite passed (12/12 checks, incl. QML load)")
         except Exception:
             if harness.stderr_lines:
                 print("--- QuickLaunch stderr ---", file=sys.stderr)
