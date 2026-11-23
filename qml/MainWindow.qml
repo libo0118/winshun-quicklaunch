@@ -36,6 +36,10 @@ ApplicationWindow {
     property int dbRevision: 0
     property Item hoverTipTarget: null
     property string hoverTipText: ""
+    property string hoveredItemId: ""
+    property string hoveredInfoText: ""
+    readonly property color tileHoverColor: theme.dark ? theme.hover : theme.withAlpha("#0F172A", 0.055)
+    readonly property color tilePressedColor: theme.dark ? theme.pressed : theme.withAlpha("#0F172A", 0.10)
 
     readonly property int gridIconSize: controller.tileSize === "small" ? 32 : (controller.tileSize === "large" ? 48 : 40)
     readonly property int baseCellW: controller.tileSize === "small" ? 88 : (controller.tileSize === "large" ? 124 : 106)
@@ -46,11 +50,12 @@ ApplicationWindow {
         if (!active) {
             ctrlHeld = false
             hideHoverTip(null)
+            clearHoveredItem("")
             controller.handleWindowDeactivated()
         }
     }
-    onVisibleChanged: if (!visible) hideHoverTip(null)
-    onDraggingItemIdChanged: if (draggingItemId.length > 0) hideHoverTip(null)
+    onVisibleChanged: if (!visible) { hideHoverTip(null); clearHoveredItem("") }
+    onDraggingItemIdChanged: if (draggingItemId.length > 0) { hideHoverTip(null); clearHoveredItem("") }
     onWidthChanged: if (visible) controller.onWindowResized(width, height)
     onHeightChanged: if (visible) controller.onWindowResized(width, height)
     onClosing: (close) => {
@@ -91,6 +96,18 @@ ApplicationWindow {
         hoverTipTarget = null
         hoverTipText = ""
         sharedToolTip.visible = false
+    }
+
+    function setHoveredItem(id, info) {
+        hoveredItemId = id
+        hoveredInfoText = info
+    }
+
+    function clearHoveredItem(id) {
+        if (!id || hoveredItemId === id) {
+            hoveredItemId = ""
+            hoveredInfoText = ""
+        }
     }
 
     function activeViewCount() {
@@ -179,6 +196,8 @@ ApplicationWindow {
             root.selectRow(0)
         }
         function onOpenSettingsRequested() { settingsDialog.openSettings() }
+        function onActiveCategoryIdChanged() { root.clearHoveredItem("") }
+        function onSearchTextChanged() { root.clearHoveredItem("") }
         function onDatabaseChanged() {
             ++root.dbRevision
             root.selectRow(root.currentRow < 0 ? 0 : root.currentRow)
@@ -898,6 +917,7 @@ ApplicationWindow {
                         flickDeceleration: 3500
                         maximumFlickVelocity: 2400
                         model: controller.itemModel
+                        onMovingChanged: if (moving) root.clearHoveredItem("")
                         ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; width: 6 }
                         delegate: Item {
                             id: sRowWrap
@@ -905,14 +925,15 @@ ApplicationWindow {
                             height: 54
 
                             readonly property bool isCurrent: index === root.currentRow
+                            readonly property bool isHovered: root.hoveredItemId === itemId && root.draggingItemId === ""
 
                             Rectangle {
                                 anchors.fill: parent
                                 radius: Math.min(theme.controlRadius, 8)
                                 color: sRowMouse.pressed
-                                    ? theme.pressed
-                                    : (isCurrent ? theme.withAlpha(theme.accent, 0.14)
-                                        : (sRowMouse.containsMouse ? theme.hover : "transparent"))
+                                    ? root.tilePressedColor
+                                    : (isHovered ? root.tileHoverColor
+                                        : (isCurrent ? theme.withAlpha(theme.accent, 0.14) : "transparent"))
                                 Behavior on color { ColorAnimation { duration: 90 } }
 
                                 RowLayout {
@@ -1031,12 +1052,10 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                onContainsMouseChanged: {
-                                    if (containsMouse) root.scheduleHoverTip(sRowMouse, name + "\n" + target + (remark.length > 0 ? "\n" + remark : ""), 550)
-                                    else root.hideHoverTip(sRowMouse)
-                                }
-                                onPressed: root.hideHoverTip(sRowMouse)
-                                Component.onDestruction: root.hideHoverTip(sRowMouse)
+                                onEntered: if (root.draggingItemId === "") root.setHoveredItem(itemId, name + " · " + target + (remark.length > 0 ? " (" + remark + ")" : ""))
+                                onExited: root.clearHoveredItem(itemId)
+                                onPressed: root.clearHoveredItem(itemId)
+                                Component.onDestruction: root.clearHoveredItem(itemId)
 
                                 onClicked: (mouse) => {
                                     root.selectRow(index)
@@ -1071,6 +1090,7 @@ ApplicationWindow {
                         maximumFlickVelocity: 2400
                         clip: true
                         model: controller.itemModel
+                        onMovingChanged: if (moving) root.clearHoveredItem("")
                         ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; width: 6 }
                         delegate: Item {
                             id: gridCardWrap
@@ -1079,6 +1099,7 @@ ApplicationWindow {
 
                             readonly property bool isCurrent: index === root.currentRow
                             readonly property bool showFocus: root.keyboardNavActive && isCurrent
+                            readonly property bool isHovered: root.hoveredItemId === itemId && root.draggingItemId === ""
 
                             Rectangle {
                                 id: cardBg
@@ -1086,10 +1107,10 @@ ApplicationWindow {
                                 anchors.margins: 2
                                 radius: Math.min(theme.cardRadius, 10)
                                 color: cardMouse.pressed
-                                    ? theme.pressed
-                                    : (cardMouse.containsMouse ? theme.hover
+                                    ? root.tilePressedColor
+                                    : (isHovered ? root.tileHoverColor
                                         : (showFocus ? theme.withAlpha(theme.accent, 0.14) : "transparent"))
-                                border.width: (showFocus || cardMouse.containsMouse || cardMouse.pressed) ? 1 : 0
+                                border.width: (showFocus || isHovered || cardMouse.pressed) ? 1 : 0
                                 border.color: showFocus ? theme.accent : theme.softBorder
                                 scale: cardMouse.pressed ? 0.96 : 1.0
                                 Behavior on color { ColorAnimation { duration: 90 } }
@@ -1201,14 +1222,12 @@ ApplicationWindow {
                                 property real pressX: 0
                                 property real pressY: 0
 
-                                onContainsMouseChanged: {
-                                    if (containsMouse && root.draggingItemId === "") root.scheduleHoverTip(cardMouse, name + "\n" + target + (remark.length > 0 ? "\n" + remark : ""), 550)
-                                    else root.hideHoverTip(cardMouse)
-                                }
-                                Component.onDestruction: root.hideHoverTip(cardMouse)
+                                onEntered: if (root.draggingItemId === "") root.setHoveredItem(itemId, name + " · " + target + (remark.length > 0 ? " (" + remark + ")" : ""))
+                                onExited: root.clearHoveredItem(itemId)
+                                Component.onDestruction: root.clearHoveredItem(itemId)
 
                                 onPressed: (mouse) => {
-                                    root.hideHoverTip(cardMouse)
+                                    root.clearHoveredItem(itemId)
                                     root.selectRow(index)
                                     pressX = mouse.x
                                     pressY = mouse.y
@@ -1268,6 +1287,7 @@ ApplicationWindow {
                         flickDeceleration: 3500
                         maximumFlickVelocity: 2400
                         model: controller.itemModel
+                        onMovingChanged: if (moving) root.clearHoveredItem("")
                         ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; width: 6 }
                         delegate: Item {
                             id: listRowWrap
@@ -1276,13 +1296,14 @@ ApplicationWindow {
 
                             readonly property bool isCurrent: index === root.currentRow
                             readonly property bool showFocus: root.keyboardNavActive && isCurrent
+                            readonly property bool isHovered: root.hoveredItemId === itemId && root.draggingItemId === ""
 
                             Rectangle {
                                 anchors.fill: parent
                                 radius: Math.min(theme.controlRadius, 6)
                                 color: rowMouse.pressed
-                                    ? theme.pressed
-                                    : (rowMouse.containsMouse ? theme.hover
+                                    ? root.tilePressedColor
+                                    : (isHovered ? root.tileHoverColor
                                         : (showFocus ? theme.withAlpha(theme.accent, 0.14) : "transparent"))
                                 border.width: showFocus ? 1 : 0
                                 border.color: theme.accent
@@ -1410,14 +1431,12 @@ ApplicationWindow {
                                 property real pressX: 0
                                 property real pressY: 0
 
-                                onContainsMouseChanged: {
-                                    if (containsMouse && root.draggingItemId === "") root.scheduleHoverTip(rowMouse, name + "\n" + target + (remark.length > 0 ? "\n" + remark : ""), 550)
-                                    else root.hideHoverTip(rowMouse)
-                                }
-                                Component.onDestruction: root.hideHoverTip(rowMouse)
+                                onEntered: if (root.draggingItemId === "") root.setHoveredItem(itemId, name + " · " + target + (remark.length > 0 ? " (" + remark + ")" : ""))
+                                onExited: root.clearHoveredItem(itemId)
+                                Component.onDestruction: root.clearHoveredItem(itemId)
 
                                 onPressed: (mouse) => {
-                                    root.hideHoverTip(rowMouse)
+                                    root.clearHoveredItem(itemId)
                                     root.selectRow(index)
                                     pressX = mouse.x
                                     pressY = mouse.y
@@ -1598,10 +1617,12 @@ ApplicationWindow {
 
                     Text {
                         Layout.fillWidth: true
-                        text: root.searchActive
-                            ? ("找到 " + searchListView.count + " 项")
-                            : (root.currentCategoryTitle() + " · " + root.activeViewCount() + " 项")
-                        color: theme.faint
+                        text: root.hoveredInfoText.length > 0
+                            ? root.hoveredInfoText
+                            : (root.searchActive
+                                ? ("找到 " + searchListView.count + " 项")
+                                : (root.currentCategoryTitle() + " · " + root.activeViewCount() + " 项"))
+                        color: root.hoveredInfoText.length > 0 ? theme.subtext : theme.faint
                         font.pixelSize: 11
                         elide: Text.ElideRight
                         verticalAlignment: Text.AlignVCenter
@@ -2005,10 +2026,12 @@ ApplicationWindow {
                 return
             }
             const target = root.hoverTipTarget
+            sharedTipLabel.text = root.hoverTipText
+            const tipW = Math.max(40, Math.ceil(sharedTipLabel.implicitWidth) + 18)
+            const tipH = Math.max(24, Math.ceil(sharedTipLabel.implicitHeight) + 12)
+            sharedToolTip.width = tipW
+            sharedToolTip.height = tipH
             const pos = target.mapToItem(root.contentItem, target.width / 2, target.height + 6)
-            sharedToolTip.text = root.hoverTipText
-            const tipW = Math.max(40, sharedToolTip.implicitWidth)
-            const tipH = Math.max(24, sharedToolTip.implicitHeight)
             const clampedX = Math.max(8, Math.min(pos.x - tipW / 2, root.width - tipW - 8))
             let clampedY = pos.y
             if (clampedY + tipH > root.height - 8) {
@@ -2021,24 +2044,24 @@ ApplicationWindow {
         }
     }
 
-    ToolTip {
+    Rectangle {
         id: sharedToolTip
         parent: root.contentItem
+        z: 950
+        enabled: false
         visible: false
-        padding: 8
-        font.pixelSize: 12
-        contentItem: Text {
-            text: sharedToolTip.text
-            font: sharedToolTip.font
+        radius: Math.min(theme.controlRadius, 6)
+        color: theme.menuBackground
+        border.width: 1
+        border.color: theme.windowEdge
+
+        Text {
+            id: sharedTipLabel
+            anchors.centerIn: parent
             color: theme.text
+            font.pixelSize: 12
             maximumLineCount: 4
             elide: Text.ElideRight
-        }
-        background: Rectangle {
-            radius: Math.min(theme.controlRadius, 6)
-            color: theme.menuBackground
-            border.width: 1
-            border.color: theme.windowEdge
         }
     }
 

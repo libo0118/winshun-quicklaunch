@@ -6,7 +6,7 @@
     "zh": "快速启动面板",
     "en": "Quick Launch Panel"
   },
-  "version": "0.3.1",
+  "version": "0.3.2",
   "minWinShun": "0.25.0",
   "description": {
     "zh": "仿 MayeNano 风格 C++ 原生快速启动面板：默认 Alt+1 一键呼出，支持分组分类、拖拽添加、拼音搜索与导入 MayeNano。",
