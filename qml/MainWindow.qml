@@ -33,6 +33,8 @@ ApplicationWindow {
     property string menuCatId: ""
     property string menuCatName: ""
     property int currentRow: 0
+    property Item hoverTipTarget: null
+    property string hoverTipText: ""
 
     readonly property int gridIconSize: controller.tileSize === "small" ? 32 : (controller.tileSize === "large" ? 50 : 42)
     readonly property int gridCellWidth: controller.tileSize === "small" ? 82 : (controller.tileSize === "large" ? 118 : 98)
@@ -42,9 +44,12 @@ ApplicationWindow {
     onActiveChanged: {
         if (!active) {
             ctrlHeld = false
+            hideHoverTip(null)
             controller.handleWindowDeactivated()
         }
     }
+    onVisibleChanged: if (!visible) hideHoverTip(null)
+    onDraggingItemIdChanged: if (draggingItemId.length > 0) hideHoverTip(null)
     onWidthChanged: if (visible) controller.onWindowResized(width, height)
     onHeightChanged: if (visible) controller.onWindowResized(width, height)
     onClosing: (close) => {
@@ -52,6 +57,39 @@ ApplicationWindow {
             close.accepted = false
             controller.hidePopup()
         }
+    }
+
+    function formatTipText(raw) {
+        if (!raw || raw.length === 0) return ""
+        const lines = raw.split("\n")
+        for (let i = 0; i < lines.length; ++i) {
+            if (lines[i].length > 58) {
+                lines[i] = lines[i].slice(0, 57) + "…"
+            }
+        }
+        return lines.join("\n")
+    }
+
+    function scheduleHoverTip(targetItem, text, delayMs) {
+        const formatted = formatTipText(text)
+        if (!targetItem || formatted.length === 0 || root.draggingItemId.length > 0) {
+            hideHoverTip(null)
+            return
+        }
+        hoverTipTarget = targetItem
+        hoverTipText = formatted
+        hoverTipTimer.interval = delayMs > 0 ? delayMs : 500
+        hoverTipTimer.restart()
+    }
+
+    function hideHoverTip(targetItem) {
+        if (targetItem !== null && targetItem !== undefined && hoverTipTarget !== targetItem) {
+            return
+        }
+        hoverTipTimer.stop()
+        hoverTipTarget = null
+        hoverTipText = ""
+        sharedToolTip.visible = false
     }
 
     function activeViewCount() {
@@ -238,9 +276,12 @@ ApplicationWindow {
         implicitHeight: 36
         padding: 0
         hoverEnabled: true
-        ToolTip.visible: hbtn.hovered && hbtn.tip.length > 0
-        ToolTip.delay: 450
-        ToolTip.text: hbtn.tip
+        onHoveredChanged: {
+            if (hovered && tip.length > 0) root.scheduleHoverTip(hbtn, tip, 450)
+            else root.hideHoverTip(hbtn)
+        }
+        onPressed: root.hideHoverTip(hbtn)
+        Component.onDestruction: root.hideHoverTip(hbtn)
 
         contentItem: Item {
             VectorGlyph {
@@ -667,9 +708,12 @@ ApplicationWindow {
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                    ToolTip.visible: containsMouse && root.draggingItemId === ""
-                                    ToolTip.delay: 480
-                                    ToolTip.text: name + " (" + count + ")"
+                                    onContainsMouseChanged: {
+                                        if (containsMouse && root.draggingItemId === "") root.scheduleHoverTip(catMouse, name + " (" + count + ")", 480)
+                                        else root.hideHoverTip(catMouse)
+                                    }
+                                    onPressed: root.hideHoverTip(catMouse)
+                                    Component.onDestruction: root.hideHoverTip(catMouse)
 
                                     onClicked: (mouse) => {
                                         if (mouse.button === Qt.LeftButton) {
@@ -898,9 +942,12 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                ToolTip.visible: containsMouse
-                                ToolTip.delay: 550
-                                ToolTip.text: name + "\n" + target + (remark.length > 0 ? "\n" + remark : "")
+                                onContainsMouseChanged: {
+                                    if (containsMouse) root.scheduleHoverTip(sRowMouse, name + "\n" + target + (remark.length > 0 ? "\n" + remark : ""), 550)
+                                    else root.hideHoverTip(sRowMouse)
+                                }
+                                onPressed: root.hideHoverTip(sRowMouse)
+                                Component.onDestruction: root.hideHoverTip(sRowMouse)
 
                                 onClicked: (mouse) => {
                                     root.selectRow(index)
@@ -1061,11 +1108,14 @@ ApplicationWindow {
                                 property real pressX: 0
                                 property real pressY: 0
 
-                                ToolTip.visible: containsMouse && root.draggingItemId === ""
-                                ToolTip.delay: 550
-                                ToolTip.text: name + "\n" + target + (remark.length > 0 ? "\n" + remark : "")
+                                onContainsMouseChanged: {
+                                    if (containsMouse && root.draggingItemId === "") root.scheduleHoverTip(cardMouse, name + "\n" + target + (remark.length > 0 ? "\n" + remark : ""), 550)
+                                    else root.hideHoverTip(cardMouse)
+                                }
+                                Component.onDestruction: root.hideHoverTip(cardMouse)
 
                                 onPressed: (mouse) => {
+                                    root.hideHoverTip(cardMouse)
                                     root.selectRow(index)
                                     pressX = mouse.x
                                     pressY = mouse.y
@@ -1265,11 +1315,14 @@ ApplicationWindow {
                                 property real pressX: 0
                                 property real pressY: 0
 
-                                ToolTip.visible: containsMouse && root.draggingItemId === ""
-                                ToolTip.delay: 550
-                                ToolTip.text: name + "\n" + target + (remark.length > 0 ? "\n" + remark : "")
+                                onContainsMouseChanged: {
+                                    if (containsMouse && root.draggingItemId === "") root.scheduleHoverTip(rowMouse, name + "\n" + target + (remark.length > 0 ? "\n" + remark : ""), 550)
+                                    else root.hideHoverTip(rowMouse)
+                                }
+                                Component.onDestruction: root.hideHoverTip(rowMouse)
 
                                 onPressed: (mouse) => {
+                                    root.hideHoverTip(rowMouse)
                                     root.selectRow(index)
                                     pressX = mouse.x
                                     pressY = mouse.y
@@ -1785,6 +1838,52 @@ ApplicationWindow {
                     }
                 }
             }
+        }
+    }
+
+    Timer {
+        id: hoverTipTimer
+        repeat: false
+        onTriggered: {
+            if (!root.visible || !root.hoverTipTarget || root.hoverTipText.length === 0 || root.draggingItemId.length > 0) {
+                sharedToolTip.visible = false
+                return
+            }
+            const target = root.hoverTipTarget
+            const pos = target.mapToItem(root.contentItem, target.width / 2, target.height + 6)
+            sharedToolTip.text = root.hoverTipText
+            const tipW = Math.max(40, sharedToolTip.implicitWidth)
+            const tipH = Math.max(24, sharedToolTip.implicitHeight)
+            const clampedX = Math.max(8, Math.min(pos.x - tipW / 2, root.width - tipW - 8))
+            let clampedY = pos.y
+            if (clampedY + tipH > root.height - 8) {
+                const above = target.mapToItem(root.contentItem, 0, -tipH - 6).y
+                clampedY = Math.max(8, above)
+            }
+            sharedToolTip.x = Math.round(clampedX)
+            sharedToolTip.y = Math.round(clampedY)
+            sharedToolTip.visible = true
+        }
+    }
+
+    ToolTip {
+        id: sharedToolTip
+        parent: root.contentItem
+        visible: false
+        padding: 8
+        font.pixelSize: 12
+        contentItem: Text {
+            text: sharedToolTip.text
+            font: sharedToolTip.font
+            color: theme.text
+            maximumLineCount: 4
+            elide: Text.ElideRight
+        }
+        background: Rectangle {
+            radius: Math.min(theme.controlRadius, 6)
+            color: theme.menuBackground
+            border.width: 1
+            border.color: theme.windowEdge
         }
     }
 

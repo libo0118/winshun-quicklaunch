@@ -297,7 +297,8 @@ def run_e2e(exe_path: Path, qt_dir: Path, repo_root: Path) -> None:
             assert not harness.stdout_errors, f"Stdout protocol violations: {harness.stdout_errors}"
             qml_errors = [
                 ln for ln in harness.stderr_lines
-                if "Failed to load qrc:/" in ln or "QQmlApplicationEngine failed" in ln or "Invalid property assignment" in ln
+                if "Failed to load qrc:/" in ln or "QQmlApplicationEngine failed" in ln
+                or "Invalid property assignment" in ln or "Component is not ready" in ln
             ]
             assert not qml_errors, f"QML loading errors on stderr: {qml_errors}"
             print("[OK] E2E JSON-RPC test suite passed (12/12 checks, incl. QML load)")

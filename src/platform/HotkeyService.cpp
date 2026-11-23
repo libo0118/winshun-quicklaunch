@@ -168,7 +168,9 @@ HotkeyService::HotkeyService(Protocol* protocol, bool hostSupportsHotkeys, QObje
 
 HotkeyService::~HotkeyService()
 {
-    releaseInternal(m_protocol != nullptr, false);
+    if (!m_activeNormalized.isEmpty() || m_localRegistered) {
+        releaseInternal(m_protocol != nullptr, false);
+    }
     if (auto* app = QCoreApplication::instance())
         app->removeNativeEventFilter(this);
 }
