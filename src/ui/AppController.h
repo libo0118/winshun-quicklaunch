@@ -53,6 +53,7 @@ class AppController : public QObject {
     Q_PROPERTY(double windowHeight READ windowHeight NOTIFY windowSizeChanged)
     Q_PROPERTY(bool dialogOpen READ dialogOpen WRITE setDialogOpen NOTIFY dialogOpenChanged)
     Q_PROPERTY(bool standaloneMode READ standaloneMode CONSTANT)
+    Q_PROPERTY(bool shuttingDown READ shuttingDown NOTIFY shuttingDownChanged)
 
 public:
     explicit AppController(Protocol* protocol, QString dataDir, bool standaloneMode, QObject* parent = nullptr);
@@ -94,6 +95,7 @@ public:
     bool dialogOpen() const { return m_dialogOpen; }
     void setDialogOpen(bool open);
     bool standaloneMode() const { return m_standaloneMode; }
+    bool shuttingDown() const { return m_shuttingDown; }
 
     Q_INVOKABLE void showPopup();
     Q_INVOKABLE void hidePopup();
@@ -146,9 +148,11 @@ signals:
     void mayeDefaultChanged();
     void windowSizeChanged();
     void dialogOpenChanged();
+    void shuttingDownChanged();
 
 private:
     void initializeStorage(const QString& dataDir, bool hostHotkeys);
+    void beginShutdown();
     bool ensureWindow();
     void refreshModels();
     void refreshItemFilter();
@@ -179,6 +183,7 @@ private:
     bool m_dialogOpen = false;
     bool m_pickingFile = false;
     bool m_hotkeysPaused = false;
+    bool m_shuttingDown = false;
 
     ThemeObject* m_theme = nullptr;
     CategoryListModel* m_categoryModel = nullptr;

@@ -101,14 +101,8 @@ AppController::AppController(Protocol* protocol, QString dataDir, bool standalon
                 handleMessage(QJsonValue{}, method, params, false);
             });
         connect(m_protocol, &Protocol::closed, this, [this]() {
-            if (m_hotkeyService) {
-                m_hotkeyService->releaseAll();
-            }
-            if (m_window) {
-                m_window->hide();
-                m_window->close();
-            }
-            QCoreApplication::quit();
+            beginShutdown();
+            QCoreApplication::exit(0);
         });
     } else if (m_standaloneMode) {
         if (m_dataDir.trimmed().isEmpty()) {
@@ -122,11 +116,32 @@ AppController::AppController(Protocol* protocol, QString dataDir, bool standalon
 
 AppController::~AppController()
 {
-    if (m_hotkeyService) {
+    if (!m_shuttingDown && m_hotkeyService) {
         m_hotkeyService->releaseAll();
     }
     m_iconProvider = nullptr;
     m_engine.reset();
+}
+
+void AppController::beginShutdown()
+{
+    if (m_shuttingDown) {
+        return;
+    }
+    m_shuttingDown = true;
+    emit shuttingDownChanged();
+    if (m_resizeSaveTimer && m_resizeSaveTimer->isActive()) {
+        m_resizeSaveTimer->stop();
+    }
+    if (m_hotkeyService) {
+        m_hotkeyService->releaseAll();
+    }
+    if (m_window) {
+        m_window->hide();
+    }
+    m_iconProvider = nullptr;
+    m_engine.reset();
+    m_window = nullptr;
 }
 
 void AppController::initializeStorage(const QString& dataDir, bool hostHotkeys)
@@ -166,6 +181,9 @@ void AppController::initializeStorage(const QString& dataDir, bool hostHotkeys)
 }
 bool AppController::ensureWindow()
 {
+    if (m_shuttingDown) {
+        return false;
+    }
     if (m_window) {
         return true;
     }
@@ -405,6 +423,9 @@ void AppController::showSettingsDialog()
 
 void AppController::handleWindowDeactivated()
 {
+    if (m_shuttingDown) {
+        return;
+    }
     if (m_lastShownTimer.isValid() && m_lastShownTimer.elapsed() < 200) {
         return;
     }
@@ -1205,7 +1226,7 @@ void AppController::handleInitialize(const QJsonValue& id, const QJsonObject& pa
     }
 
     QTimer::singleShot(350, this, [this]() {
-        if (!m_window && m_initialized) {
+        if (!m_shuttingDown && !m_window && m_initialized) {
             ensureWindow();
         }
     });
@@ -1451,17 +1472,11 @@ void AppController::handleHotkey(const QJsonObject& params)
 
 void AppController::handleShutdown(const QJsonValue& id, bool hasId)
 {
-    if (m_hotkeyService) {
-        m_hotkeyService->releaseAll();
-    }
-    if (m_window) {
-        m_window->hide();
-        m_window->close();
-    }
+    beginShutdown();
     if (hasId && m_protocol) {
         m_protocol->respond(id, QJsonObject{});
     }
-    QCoreApplication::quit();
+    QCoreApplication::exit(0);
 }
 
 } // namespace ql

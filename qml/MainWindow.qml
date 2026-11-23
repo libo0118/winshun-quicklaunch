@@ -48,7 +48,7 @@ ApplicationWindow {
     onWidthChanged: if (visible) controller.onWindowResized(width, height)
     onHeightChanged: if (visible) controller.onWindowResized(width, height)
     onClosing: (close) => {
-        if (!controller.standaloneMode) {
+        if (!controller.standaloneMode && !controller.shuttingDown) {
             close.accepted = false
             controller.hidePopup()
         }
