@@ -93,7 +93,7 @@ public:
     double windowHeight() const { return m_windowHeight; }
 
     bool dialogOpen() const { return m_dialogOpen; }
-    void setDialogOpen(bool open);
+    Q_INVOKABLE void setDialogOpen(bool open);
     bool standaloneMode() const { return m_standaloneMode; }
     bool shuttingDown() const { return m_shuttingDown; }
 

@@ -334,6 +334,7 @@ ApplicationWindow {
         property string kind: ""
         property string tip: ""
         property bool isClose: false
+        property bool active: false
         implicitWidth: 32
         implicitHeight: 32
         padding: 0
@@ -354,32 +355,105 @@ ApplicationWindow {
                 kind: hbtn.kind
                 color: (hbtn.isClose && (hbtn.hovered || hbtn.down))
                     ? "#FFFFFF"
-                    : (hbtn.hovered ? theme.text : theme.subtext)
+                    : ((hbtn.hovered || hbtn.active) ? theme.text : theme.subtext)
             }
         }
         background: Rectangle {
             radius: Math.min(theme.controlRadius, 6)
             color: hbtn.isClose
                 ? (hbtn.down ? Qt.darker(theme.danger, 1.15) : (hbtn.hovered ? theme.danger : "transparent"))
-                : (hbtn.down ? theme.pressed : (hbtn.hovered ? theme.hover : "transparent"))
+                : (hbtn.down ? theme.pressed : ((hbtn.hovered || hbtn.active) ? theme.hover : "transparent"))
             Behavior on color { ColorAnimation { duration: 90 } }
         }
     }
 
     component StyledMenuItem: MenuItem {
         id: smi
-        implicitHeight: 30
-        contentItem: Text {
-            text: smi.text
-            color: smi.enabled ? theme.text : theme.faint
-            font.pixelSize: 12
-            verticalAlignment: Text.AlignVCenter
-            leftPadding: 10
-            rightPadding: 14
+        property string shortcutText: ""
+        property bool checkSlot: false
+        property bool itemChecked: false
+        implicitHeight: 32
+        leftPadding: 12
+        rightPadding: 12
+        topPadding: 0
+        bottomPadding: 0
+        spacing: 0
+        hoverEnabled: true
+        indicator: Item { implicitWidth: 0; implicitHeight: 0; visible: false }
+        arrow: Item { implicitWidth: 0; implicitHeight: 0; visible: false }
+        contentItem: RowLayout {
+            spacing: 8
+            Item {
+                visible: smi.checkSlot
+                Layout.preferredWidth: 12
+                Layout.preferredHeight: 12
+                Layout.alignment: Qt.AlignVCenter
+                Rectangle {
+                    visible: smi.itemChecked
+                    anchors.centerIn: parent
+                    width: 6
+                    height: 6
+                    radius: 3
+                    color: theme.accent
+                }
+            }
+            Text {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
+                text: smi.text
+                color: smi.enabled ? (smi.itemChecked ? theme.accent : theme.text) : theme.faint
+                font.pixelSize: 12
+                font.weight: smi.itemChecked ? Font.Medium : Font.Normal
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
+            }
+            Text {
+                visible: smi.shortcutText.length > 0 && !smi.subMenu
+                Layout.alignment: Qt.AlignVCenter
+                text: smi.shortcutText
+                color: theme.faint
+                font.pixelSize: 11
+                verticalAlignment: Text.AlignVCenter
+            }
+            Canvas {
+                visible: Boolean(smi.subMenu)
+                Layout.preferredWidth: 10
+                Layout.preferredHeight: 10
+                Layout.alignment: Qt.AlignVCenter
+                property color arrowColor: smi.highlighted ? theme.text : theme.subtext
+                onArrowColorChanged: requestPaint()
+                onWidthChanged: requestPaint()
+                onHeightChanged: requestPaint()
+                onPaint: {
+                    const ctx = getContext("2d")
+                    ctx.reset()
+                    const c = arrowColor
+                    ctx.strokeStyle = "rgba(" + Math.round(c.r * 255) + "," + Math.round(c.g * 255) + "," + Math.round(c.b * 255) + "," + c.a + ")"
+                    ctx.lineWidth = 1.4
+                    ctx.lineCap = "round"
+                    ctx.lineJoin = "round"
+                    ctx.beginPath()
+                    ctx.moveTo(3.5, 2.0)
+                    ctx.lineTo(6.8, 5.0)
+                    ctx.lineTo(3.5, 8.0)
+                    ctx.stroke()
+                }
+            }
         }
         background: Rectangle {
             color: smi.highlighted ? theme.menuHover : "transparent"
-            radius: Math.max(0, Math.min(theme.controlRadius, 6) - 2)
+            radius: Math.max(4, Math.min(theme.controlRadius, 6))
+        }
+    }
+
+    component StyledMenuSeparator: MenuSeparator {
+        topPadding: 4
+        bottomPadding: 4
+        leftPadding: 8
+        rightPadding: 8
+        contentItem: Rectangle {
+            implicitHeight: 1
+            color: theme.softBorder
         }
     }
 
@@ -685,10 +759,14 @@ ApplicationWindow {
                         TopIconBtn {
                             id: menuBtn
                             kind: "menu"
+                            active: mainMenu.visible
                             tip: "更多功能"
                             onClicked: {
-                                const pt = menuBtn.mapToItem(keyRoot, menuBtn.width - 192, menuBtn.height + 4)
-                                mainMenu.popup(keyRoot, Math.max(8, pt.x), pt.y)
+                                const menuW = mainMenu.width > 0 ? mainMenu.width : 188
+                                const pt = menuBtn.mapToItem(keyRoot, menuBtn.width - menuW, 0)
+                                const targetX = Math.max(8, Math.min(pt.x, keyRoot.width - menuW - 8))
+                                const targetY = headerBar.height + 4
+                                mainMenu.popup(keyRoot, Math.round(targetX), Math.round(targetY))
                             }
                         }
 
@@ -1801,94 +1879,127 @@ ApplicationWindow {
 
     Menu {
         id: mainMenu
-        padding: 4
+        width: 188
+        padding: 5
+        delegate: StyledMenuItem {}
         background: Rectangle {
-            implicitWidth: 192
+            implicitWidth: 188
             color: theme.menuBackground
             radius: Math.min(theme.controlRadius, 8)
             border.width: 1
-            border.color: theme.softBorder
+            border.color: theme.windowEdge
         }
 
-        StyledMenuItem { text: "添加启动项 (Ctrl+N)"; onTriggered: itemEditDialog.openNew(controller.activeCategoryId) }
-        StyledMenuItem { text: "新建分组"; onTriggered: categoryPrompt.openCreate() }
         StyledMenuItem {
-            text: controller.hasDefaultMayeFile ? "一键导入 MayeNano (MDB.json)" : "导入 MayeNano (选择文件)..."
-            onTriggered: controller.hasDefaultMayeFile ? controller.importMayeDefault() : controller.importMayeFromDialog()
+            text: "添加启动项"
+            shortcutText: "Ctrl+N"
+            onTriggered: itemEditDialog.openNew(controller.activeCategoryId)
         }
-        MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: theme.softBorder } }
+        StyledMenuItem {
+            text: "新建分组"
+            onTriggered: categoryPrompt.openCreate()
+        }
+        StyledMenuSeparator {}
         StyledMenuItem {
             text: controller.viewMode === "grid" ? "切换为列表视图" : "切换为图标网格"
             onTriggered: controller.viewMode = (controller.viewMode === "grid" ? "list" : "grid")
         }
         Menu {
+            id: tileSizeSubMenu
             title: "图标尺寸"
-            padding: 4
+            width: 156
+            padding: 5
+            delegate: StyledMenuItem {}
             background: Rectangle {
-                implicitWidth: 148
+                implicitWidth: 156
                 color: theme.menuBackground
                 radius: Math.min(theme.controlRadius, 8)
                 border.width: 1
-                border.color: theme.softBorder
+                border.color: theme.windowEdge
             }
-            StyledMenuItem { text: (controller.tileSize === "small" ? "● " : "   ") + "小图标 (32px)"; onTriggered: controller.tileSize = "small" }
-            StyledMenuItem { text: (controller.tileSize === "medium" ? "● " : "   ") + "中等图标 (40px)"; onTriggered: controller.tileSize = "medium" }
-            StyledMenuItem { text: (controller.tileSize === "large" ? "● " : "   ") + "大图标 (48px)"; onTriggered: controller.tileSize = "large" }
+            StyledMenuItem {
+                text: "小图标 (32px)"
+                checkSlot: true
+                itemChecked: controller.tileSize === "small"
+                onTriggered: controller.tileSize = "small"
+            }
+            StyledMenuItem {
+                text: "中等图标 (40px)"
+                checkSlot: true
+                itemChecked: controller.tileSize === "medium"
+                onTriggered: controller.tileSize = "medium"
+            }
+            StyledMenuItem {
+                text: "大图标 (48px)"
+                checkSlot: true
+                itemChecked: controller.tileSize === "large"
+                onTriggered: controller.tileSize = "large"
+            }
         }
-        MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: theme.softBorder } }
-        StyledMenuItem { text: "设置 (Ctrl+,)"; onTriggered: settingsDialog.openSettings() }
+        StyledMenuSeparator {}
+        StyledMenuItem {
+            text: "设置"
+            shortcutText: "Ctrl+,"
+            onTriggered: settingsDialog.openSettings()
+        }
     }
 
     Menu {
         id: itemMenu
-        padding: 4
+        width: 168
+        padding: 5
+        delegate: StyledMenuItem {}
         background: Rectangle {
             implicitWidth: 168
             color: theme.menuBackground
             radius: Math.min(theme.controlRadius, 8)
             border.width: 1
-            border.color: theme.softBorder
+            border.color: theme.windowEdge
         }
 
         StyledMenuItem { text: "启动"; onTriggered: controller.launchItem(root.menuItemId, false) }
         StyledMenuItem { text: "以管理员身份运行"; onTriggered: controller.launchItem(root.menuItemId, true) }
         StyledMenuItem { text: "打开所在文件夹"; onTriggered: controller.revealItem(root.menuItemId) }
         StyledMenuItem { text: "复制目标路径"; onTriggered: controller.copyItemTarget(root.menuItemId) }
-        MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: theme.softBorder } }
+        StyledMenuSeparator {}
         StyledMenuItem { text: "编辑..."; onTriggered: itemEditDialog.openEdit(root.menuItemId) }
         Menu {
             id: moveSubMenu
             title: "移动到分组"
-            padding: 4
+            width: 152
+            padding: 5
+            delegate: StyledMenuItem {}
             background: Rectangle {
-                implicitWidth: 148
+                implicitWidth: 152
                 color: theme.menuBackground
                 radius: Math.min(theme.controlRadius, 8)
                 border.width: 1
-                border.color: theme.softBorder
+                border.color: theme.windowEdge
             }
         }
         StyledMenuItem { text: "前移"; onTriggered: controller.moveItemOrder(root.menuItemId, -1) }
         StyledMenuItem { text: "后移"; onTriggered: controller.moveItemOrder(root.menuItemId, 1) }
-        MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: theme.softBorder } }
+        StyledMenuSeparator {}
         StyledMenuItem { text: "删除"; onTriggered: controller.deleteItem(root.menuItemId) }
     }
 
     Menu {
         id: categoryMenu
-        padding: 4
+        width: 148
+        padding: 5
+        delegate: StyledMenuItem {}
         background: Rectangle {
             implicitWidth: 148
             color: theme.menuBackground
             radius: Math.min(theme.controlRadius, 8)
             border.width: 1
-            border.color: theme.softBorder
+            border.color: theme.windowEdge
         }
 
         StyledMenuItem { text: "重命名分组..."; onTriggered: categoryPrompt.openRename(root.menuCatId, root.menuCatName) }
         StyledMenuItem { text: "上移分组"; onTriggered: controller.moveCategoryOrder(root.menuCatId, -1) }
         StyledMenuItem { text: "下移分组"; onTriggered: controller.moveCategoryOrder(root.menuCatId, 1) }
-        MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: theme.softBorder } }
+        StyledMenuSeparator {}
         StyledMenuItem { text: "删除分组"; onTriggered: controller.deleteCategory(root.menuCatId) }
     }
 

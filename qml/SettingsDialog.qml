@@ -1007,7 +1007,7 @@ Popup {
                 spacing: 8
 
                 Text {
-                    text: "v0.3.2"
+                    text: "v0.3.3"
                     color: theme.faint
                     font.pixelSize: 11
                     Layout.fillWidth: true
