@@ -112,12 +112,12 @@ Popup {
         selectedTextColor: theme.accentText
         selectionColor: theme.accentFill
         font.pixelSize: 13
-        implicitHeight: 32
+        implicitHeight: 34
         leftPadding: 10
         rightPadding: 10
         background: Rectangle {
             color: theme.control
-            radius: theme.controlRadius
+            radius: Math.min(theme.controlRadius, 6)
             border.width: 1
             border.color: styledField.activeFocus ? theme.inputFocused : theme.controlBorder
         }
@@ -125,9 +125,9 @@ Popup {
 
     component SmallActionBtn: Button {
         id: btn
-        implicitHeight: 32
-        leftPadding: 10
-        rightPadding: 10
+        implicitHeight: 34
+        leftPadding: 12
+        rightPadding: 12
         contentItem: Text {
             text: btn.text
             color: theme.text
@@ -137,9 +137,47 @@ Popup {
         }
         background: Rectangle {
             color: btn.down ? theme.pressed : (btn.hovered ? theme.controlHover : theme.control)
-            radius: theme.controlRadius
+            radius: Math.min(theme.controlRadius, 6)
             border.width: 1
             border.color: theme.controlBorder
+        }
+    }
+
+    component DialogCloseBtn: Button {
+        id: cbtn
+        implicitWidth: 30
+        implicitHeight: 30
+        padding: 0
+        hoverEnabled: true
+        contentItem: Canvas {
+            id: closeCanvas
+            property color strokeColor: cbtn.hovered ? "#FFFFFF" : theme.subtext
+            onStrokeColorChanged: requestPaint()
+            onWidthChanged: requestPaint()
+            onHeightChanged: requestPaint()
+            onPaint: {
+                const ctx = getContext("2d")
+                ctx.reset()
+                const s = Math.min(width, height)
+                if (s <= 0) return
+                const c = strokeColor
+                ctx.strokeStyle = "rgba(" + Math.round(c.r * 255) + "," + Math.round(c.g * 255) + "," + Math.round(c.b * 255) + "," + c.a + ")"
+                ctx.lineWidth = 1.35
+                ctx.lineCap = "round"
+                const cx = width / 2
+                const cy = height / 2
+                const r = 4.5
+                ctx.beginPath()
+                ctx.moveTo(cx - r, cy - r)
+                ctx.lineTo(cx + r, cy + r)
+                ctx.moveTo(cx + r, cy - r)
+                ctx.lineTo(cx - r, cy + r)
+                ctx.stroke()
+            }
+        }
+        background: Rectangle {
+            color: cbtn.hovered ? theme.danger : "transparent"
+            radius: Math.min(theme.controlRadius, 6)
         }
     }
 
@@ -148,13 +186,13 @@ Popup {
 
         Rectangle {
             Layout.fillWidth: true
-            height: 44
+            height: 46
             color: "transparent"
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 16
-                anchors.rightMargin: 12
+                anchors.leftMargin: 18
+                anchors.rightMargin: 14
 
                 Text {
                     text: root.editItemId === "" ? "添加启动项" : "编辑启动项"
@@ -164,10 +202,7 @@ Popup {
                     Layout.fillWidth: true
                 }
 
-                SmallActionBtn {
-                    text: "✕"
-                    implicitWidth: 28
-                    implicitHeight: 28
+                DialogCloseBtn {
                     onClicked: root.close()
                 }
             }
@@ -177,21 +212,21 @@ Popup {
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
                 height: 1
-                color: theme.divider
+                color: theme.withAlpha(theme.divider, 0.7)
             }
         }
         GridLayout {
             Layout.fillWidth: true
-            Layout.margins: 16
+            Layout.margins: 18
             columns: 2
-            columnSpacing: 12
-            rowSpacing: 10
+            columnSpacing: 14
+            rowSpacing: 11
 
             Text { text: "所属分组"; color: theme.subtext; font.pixelSize: 12 }
             ComboBox {
                 id: categoryCombo
                 Layout.fillWidth: true
-                implicitHeight: 32
+                implicitHeight: 34
                 model: controller.categoryChoices
                 textRole: "name"
                 valueRole: "id"
@@ -367,13 +402,26 @@ Popup {
                     color: adminCheck.checked ? theme.accentFill : theme.control
                     border.width: 1
                     border.color: adminCheck.checked ? theme.accentFill : theme.controlBorder
-                    Text {
-                        anchors.centerIn: parent
-                        text: "✓"
+                    Canvas {
+                        anchors.fill: parent
                         visible: adminCheck.checked
-                        color: theme.accentText
-                        font.pixelSize: 11
-                        font.weight: Font.Bold
+                        property color strokeColor: theme.accentText
+                        onStrokeColorChanged: requestPaint()
+                        onVisibleChanged: if (visible) requestPaint()
+                        onPaint: {
+                            const ctx = getContext("2d")
+                            ctx.reset()
+                            const c = strokeColor
+                            ctx.strokeStyle = "rgba(" + Math.round(c.r * 255) + "," + Math.round(c.g * 255) + "," + Math.round(c.b * 255) + "," + c.a + ")"
+                            ctx.lineWidth = 1.6
+                            ctx.lineCap = "round"
+                            ctx.lineJoin = "round"
+                            ctx.beginPath()
+                            ctx.moveTo(3.5, 8.2)
+                            ctx.lineTo(6.6, 11.2)
+                            ctx.lineTo(12.5, 4.8)
+                            ctx.stroke()
+                        }
                     }
                 }
                 contentItem: Text {
@@ -400,7 +448,7 @@ Popup {
 
         Rectangle {
             Layout.fillWidth: true
-            height: 52
+            height: 54
             color: "transparent"
 
             Rectangle {
@@ -408,13 +456,13 @@ Popup {
                 anchors.right: parent.right
                 anchors.top: parent.top
                 height: 1
-                color: theme.divider
+                color: theme.withAlpha(theme.divider, 0.7)
             }
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 16
-                anchors.rightMargin: 16
+                anchors.leftMargin: 18
+                anchors.rightMargin: 18
                 spacing: 8
 
                 Item { Layout.fillWidth: true }
@@ -422,6 +470,7 @@ Popup {
                 SmallActionBtn {
                     text: "取消"
                     implicitWidth: 78
+                    implicitHeight: 32
                     onClicked: root.close()
                 }
 
@@ -441,7 +490,7 @@ Popup {
                     }
                     background: Rectangle {
                         color: saveBtn.down ? theme.pressed : (saveBtn.hovered ? theme.accent : theme.accentFill)
-                        radius: theme.controlRadius
+                        radius: Math.min(theme.controlRadius, 6)
                     }
                 }
             }

@@ -96,19 +96,9 @@ QString extractFileNameLower(const QString& target) {
     return QFileInfo(cleaned).fileName().toLower();
 }
 
-struct IndexedItem {
-    QString nameLower;
-    QString nameInitials;
-    QString kwLower;
-    QString kwInitials;
-    QString remarkLower;
-    QString remarkInitials;
-    QString targetLower;
-    QString fileNameLower;
-};
-
-IndexedItem buildIndexedItem(const LaunchItem& item) {
-    IndexedItem idx;
+PinyinMatcher::IndexedEntry buildIndexedEntry(const LaunchItem& item) {
+    PinyinMatcher::IndexedEntry idx;
+    idx.item = item;
     idx.nameLower = item.name.toLower();
     idx.nameInitials = PinyinMatcher::initials(item.name);
     idx.kwLower = item.keywords.toLower();
@@ -120,7 +110,7 @@ IndexedItem buildIndexedItem(const LaunchItem& item) {
     return idx;
 }
 
-int scoreToken(const IndexedItem& idx, const QString& tok) {
+int scoreToken(const PinyinMatcher::IndexedEntry& idx, const QString& tok) {
     if (idx.nameLower == tok) return 100;
     if (idx.nameLower.startsWith(tok)) return 92;
     if (idx.nameLower.contains(tok)) return 80;
@@ -157,28 +147,36 @@ QString PinyinMatcher::initials(const QString& text) {
     return result;
 }
 
+PinyinMatcher::SearchIndex PinyinMatcher::buildIndex(const LauncherDatabase& db) {
+    SearchIndex index;
+    index.categoryNames.reserve(db.categories.size());
+    for (const auto& cat : db.categories) {
+        index.categoryNames.insert(cat.id, cat.name);
+    }
+    index.entries.reserve(db.items.size());
+    for (const auto& item : db.items) {
+        index.entries.append(buildIndexedEntry(item));
+    }
+    return index;
+}
+
 QList<SearchMatch> PinyinMatcher::search(
-    const LauncherDatabase& db,
+    const SearchIndex& index,
     const QString& query,
     const QString& activeCategoryId,
     bool searchAllWhenNonEmpty) {
-    QHash<QString, QString> catNames;
-    catNames.reserve(db.categories.size());
-    for (const auto& cat : db.categories) {
-        catNames.insert(cat.id, cat.name);
-    }
-
     const QString simplified = query.simplified();
     const bool allCategories =
         activeCategoryId.isEmpty() || activeCategoryId == QLatin1String("__all__");
     QList<SearchMatch> matches;
 
     if (simplified.isEmpty()) {
-        for (const auto& item : db.items) {
-            if (!allCategories && item.categoryId != activeCategoryId) {
+        for (const auto& entry : index.entries) {
+            if (!allCategories && entry.item.categoryId != activeCategoryId) {
                 continue;
             }
-            matches.append(SearchMatch{item, catNames.value(item.categoryId), 0});
+            matches.append(SearchMatch{
+                entry.item, index.categoryNames.value(entry.item.categoryId), 0});
         }
         std::stable_sort(matches.begin(), matches.end(),
                          [](const SearchMatch& a, const SearchMatch& b) {
@@ -194,15 +192,14 @@ QList<SearchMatch> PinyinMatcher::search(
     const QStringList tokens = fullLower.split(u' ', Qt::SkipEmptyParts);
     const bool filterByCat = !searchAllWhenNonEmpty && !allCategories;
 
-    for (const auto& item : db.items) {
-        if (filterByCat && item.categoryId != activeCategoryId) {
+    for (const auto& entry : index.entries) {
+        if (filterByCat && entry.item.categoryId != activeCategoryId) {
             continue;
         }
-        const IndexedItem idx = buildIndexedItem(item);
         int totalScore = 0;
         bool allMatched = true;
         for (const auto& tok : tokens) {
-            const int s = scoreToken(idx, tok);
+            const int s = scoreToken(entry, tok);
             if (s <= 0) {
                 allMatched = false;
                 break;
@@ -213,16 +210,17 @@ QList<SearchMatch> PinyinMatcher::search(
             continue;
         }
         int baseScore = totalScore / static_cast<int>(tokens.size());
-        if (idx.nameLower == fullLower) {
+        if (entry.nameLower == fullLower) {
             baseScore = std::max(baseScore, 100);
-        } else if (idx.nameLower.startsWith(fullLower)) {
+        } else if (entry.nameLower.startsWith(fullLower)) {
             baseScore = std::max(baseScore, 92);
-        } else if (idx.nameLower.contains(fullLower)) {
+        } else if (entry.nameLower.contains(fullLower)) {
             baseScore = std::max(baseScore, 80);
         }
-        const int bonus = std::clamp(item.runCount, 0, 8);
+        const int bonus = std::clamp(entry.item.runCount, 0, 8);
         const int finalScore = std::min(100, baseScore + bonus);
-        matches.append(SearchMatch{item, catNames.value(item.categoryId), finalScore});
+        matches.append(SearchMatch{
+            entry.item, index.categoryNames.value(entry.item.categoryId), finalScore});
     }
 
     std::stable_sort(matches.begin(), matches.end(),
@@ -236,6 +234,14 @@ QList<SearchMatch> PinyinMatcher::search(
                          return a.item.order < b.item.order;
                      });
     return matches;
+}
+
+QList<SearchMatch> PinyinMatcher::search(
+    const LauncherDatabase& db,
+    const QString& query,
+    const QString& activeCategoryId,
+    bool searchAllWhenNonEmpty) {
+    return search(buildIndex(db), query, activeCategoryId, searchAllWhenNonEmpty);
 }
 
 } // namespace ql

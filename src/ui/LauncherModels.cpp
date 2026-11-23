@@ -59,13 +59,15 @@ void CategoryListModel::refresh(const LauncherDatabase& db)
 
     QList<Row> nextRows;
     nextRows.reserve(cats.size() + 1);
-    nextRows.append(Row{
-        QStringLiteral("__all__"),
-        QStringLiteral("全部"),
-        static_cast<int>(db.items.size()),
-        true,
-        -1
-    });
+    if (cats.size() >= 2) {
+        nextRows.append(Row{
+            QStringLiteral("__all__"),
+            QStringLiteral("全部"),
+            static_cast<int>(db.items.size()),
+            true,
+            -1
+        });
+    }
     for (const auto& c : cats) {
         nextRows.append(Row{c.id, c.name, counts.value(c.id, 0), false, c.order});
     }

@@ -3,8 +3,11 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QHash>
 #include <QPainter>
 #include <QPainterPath>
+#include <QSet>
+#include <QThreadPool>
 #include <QUrl>
 
 #include <windows.h>
@@ -15,6 +18,11 @@
 #include <shlobj.h>
 #include <shobjidl.h>
 
+#include <algorithm>
+#include <atomic>
+#include <deque>
+#include <memory>
+#include <mutex>
 #include <vector>
 
 namespace ql {
@@ -213,9 +221,43 @@ QImage loadDirectImageFile(const QString& path)
 }
 
 } // namespace
+
+struct IconCacheState {
+    static constexpr int kMaxCacheEntries = 512;
+    static constexpr int kMaxPrewarmBatch = 120;
+
+    std::atomic<bool> alive{true};
+    std::mutex mutex;
+    QHash<QString, QImage> cache;
+    std::deque<QString> order;
+
+    static QImage extractIconImage(const QString& decodedId);
+    static QImage fallbackIcon();
+
+    QImage insertLocked(const QString& key, const QImage& img)
+    {
+        if (const auto it = cache.constFind(key); it != cache.constEnd())
+            return it.value();
+        if (static_cast<int>(cache.size()) >= kMaxCacheEntries && !order.empty()) {
+            cache.remove(order.front());
+            order.pop_front();
+        }
+        cache.insert(key, img);
+        order.push_back(key);
+        return img;
+    }
+};
+
 IconProvider::IconProvider()
     : QQuickImageProvider(QQuickImageProvider::Image)
+    , m_state(std::make_shared<IconCacheState>())
 {
+}
+
+IconProvider::~IconProvider()
+{
+    if (m_state)
+        m_state->alive.store(false, std::memory_order_release);
 }
 
 QImage IconProvider::requestImage(const QString& id, QSize* size, const QSize& requestedSize)
@@ -223,33 +265,24 @@ QImage IconProvider::requestImage(const QString& id, QSize* size, const QSize& r
     const QString decoded = QUrl::fromPercentEncoding(id.toUtf8()).trimmed();
     QImage base;
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        const auto it = m_cache.constFind(decoded);
-        if (it != m_cache.constEnd())
+        std::lock_guard<std::mutex> lock(m_state->mutex);
+        const auto it = m_state->cache.constFind(decoded);
+        if (it != m_state->cache.constEnd())
             base = it.value();
     }
 
     if (base.isNull()) {
-        base = extractIconImage(decoded);
+        base = IconCacheState::extractIconImage(decoded);
         if (base.isNull())
-            base = fallbackIcon();
+            base = IconCacheState::fallbackIcon();
 
-        std::lock_guard<std::mutex> lock(m_mutex);
-        if (!m_cache.contains(decoded)) {
-            if (static_cast<int>(m_cache.size()) >= kMaxCacheEntries && !m_order.empty()) {
-                m_cache.remove(m_order.front());
-                m_order.pop_front();
-            }
-            m_cache.insert(decoded, base);
-            m_order.push_back(decoded);
-        } else {
-            base = m_cache.value(decoded);
-        }
+        std::lock_guard<std::mutex> lock(m_state->mutex);
+        base = m_state->insertLocked(decoded, base);
     }
 
     QImage out = base;
     if (requestedSize.isValid() && requestedSize.width() > 0 && requestedSize.height() > 0
-        && out.size() != requestedSize) {
+        && (out.width() > requestedSize.width() || out.height() > requestedSize.height())) {
         out = out.scaled(requestedSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
     }
     if (size)
@@ -257,7 +290,71 @@ QImage IconProvider::requestImage(const QString& id, QSize* size, const QSize& r
     return out;
 }
 
-QImage IconProvider::extractIconImage(const QString& decodedId) const
+void IconProvider::prewarmAsync(const QStringList& iconKeys)
+{
+    if (!m_state || !m_state->alive.load(std::memory_order_acquire) || iconKeys.isEmpty())
+        return;
+
+    QStringList candidates;
+    QSet<QString> seen;
+    candidates.reserve(std::min<qsizetype>(iconKeys.size(), IconCacheState::kMaxPrewarmBatch));
+    for (const QString& rawKey : iconKeys) {
+        const QString key = rawKey.trimmed();
+        if (key.isEmpty() || seen.contains(key))
+            continue;
+        seen.insert(key);
+        candidates.append(key);
+        if (candidates.size() >= IconCacheState::kMaxPrewarmBatch)
+            break;
+    }
+    if (candidates.isEmpty())
+        return;
+
+    QStringList keysToLoad;
+    {
+        std::lock_guard<std::mutex> lock(m_state->mutex);
+        if (!m_state->alive.load(std::memory_order_acquire))
+            return;
+        keysToLoad.reserve(candidates.size());
+        for (const QString& key : candidates) {
+            if (!m_state->cache.contains(key))
+                keysToLoad.append(key);
+        }
+    }
+    if (keysToLoad.isEmpty())
+        return;
+
+    QThreadPool::globalInstance()->start(
+        [weakState = std::weak_ptr<IconCacheState>(m_state),
+         keys = std::move(keysToLoad)]() {
+            for (const QString& key : keys) {
+                {
+                    const auto state = weakState.lock();
+                    if (!state || !state->alive.load(std::memory_order_acquire))
+                        return;
+                    std::lock_guard<std::mutex> lock(state->mutex);
+                    if (!state->alive.load(std::memory_order_acquire))
+                        return;
+                    if (state->cache.contains(key))
+                        continue;
+                }
+                QImage img = IconCacheState::extractIconImage(key);
+                if (img.isNull())
+                    img = IconCacheState::fallbackIcon();
+                {
+                    const auto state = weakState.lock();
+                    if (!state || !state->alive.load(std::memory_order_acquire))
+                        return;
+                    std::lock_guard<std::mutex> lock(state->mutex);
+                    if (!state->alive.load(std::memory_order_acquire))
+                        return;
+                    state->insertLocked(key, img);
+                }
+            }
+        });
+}
+
+QImage IconCacheState::extractIconImage(const QString& decodedId)
 {
     if (decodedId.isEmpty())
         return fallbackIcon();
@@ -311,7 +408,7 @@ QImage IconProvider::extractIconImage(const QString& decodedId) const
     return fallbackIcon();
 }
 
-QImage IconProvider::fallbackIcon() const
+QImage IconCacheState::fallbackIcon()
 {
     QImage img(48, 48, QImage::Format_ARGB32);
     img.fill(Qt::transparent);

@@ -8,6 +8,7 @@
 
 #include <QClipboard>
 #include <QCoreApplication>
+#include <QDesktopServices>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -20,6 +21,7 @@
 #include <QQmlContext>
 #include <QQuickWindow>
 #include <QSaveFile>
+#include <QSizeF>
 #include <QStandardPaths>
 #include <QTimer>
 
@@ -60,6 +62,14 @@ LaunchItem makeItemFromLocalPath(const QString& filePath, const QString& categor
     }
     item.target = native;
     return item;
+}
+
+QSizeF resolveWindowSize(double rawW, double rawH, bool userResized)
+{
+    if (!userResized && qFuzzyCompare(rawW, 760.0) && qFuzzyCompare(rawH, 520.0)) {
+        return QSizeF(720.0, 490.0);
+    }
+    return QSizeF(qBound(500.0, rawW, 1600.0), qBound(340.0, rawH, 1100.0));
 }
 
 } // namespace
@@ -115,6 +125,8 @@ AppController::~AppController()
     if (m_hotkeyService) {
         m_hotkeyService->releaseAll();
     }
+    m_iconProvider = nullptr;
+    m_engine.reset();
 }
 
 void AppController::initializeStorage(const QString& dataDir, bool hostHotkeys)
@@ -128,8 +140,12 @@ void AppController::initializeStorage(const QString& dataDir, bool hostHotkeys)
 
     const LauncherDatabase db = m_store->loadOrInitialize();
     m_activeCategoryId = db.activeCategoryId.isEmpty() ? QStringLiteral("__all__") : db.activeCategoryId;
-    m_windowWidth = qBound(560.0, db.windowWidth, 1600.0);
-    m_windowHeight = qBound(380.0, db.windowHeight, 1100.0);
+    if (db.categories.size() == 1 && m_activeCategoryId == QLatin1String("__all__")) {
+        m_activeCategoryId = db.categories.first().id;
+    }
+    const QSizeF sz = resolveWindowSize(db.windowWidth, db.windowHeight, m_userResized);
+    m_windowWidth = sz.width();
+    m_windowHeight = sz.height();
 
     m_hotkeyService = std::make_unique<HotkeyService>(m_protocol.data(), hostHotkeys, this);
     connect(m_hotkeyService.get(), &HotkeyService::triggered, this, &AppController::togglePopup);
@@ -159,7 +175,9 @@ bool AppController::ensureWindow()
     if (!hostQmlDir.isEmpty()) {
         m_engine->addImportPath(hostQmlDir);
     }
-    m_engine->addImageProvider(QStringLiteral("appicon"), new IconProvider());
+    auto* provider = new IconProvider();
+    m_iconProvider = provider;
+    m_engine->addImageProvider(QStringLiteral("appicon"), provider);
     m_engine->rootContext()->setContextProperty(QStringLiteral("controller"), this);
     m_engine->rootContext()->setContextProperty(QStringLiteral("theme"), m_theme);
     m_engine->load(QUrl(QStringLiteral("qrc:/ql/MainWindow.qml")));
@@ -177,6 +195,8 @@ bool AppController::ensureWindow()
         m_window->setWidth(qRound(m_windowWidth));
         m_window->setHeight(qRound(m_windowHeight));
     }
+    ShellBridge::applyWindowChrome(m_window.data(), m_theme->data());
+    prewarmIcons();
     return true;
 }
 
@@ -185,26 +205,40 @@ void AppController::refreshModels()
     if (!m_store) {
         return;
     }
-    const LauncherDatabase db = m_store->snapshot();
-    m_categoryModel->refresh(db);
+    m_cachedDb = m_store->snapshot();
+    m_searchIndex = PinyinMatcher::buildIndex(m_cachedDb);
+    m_categoryModel->refresh(m_cachedDb);
 
-    QString nextCat = db.activeCategoryId;
+    QString nextCat = m_cachedDb.activeCategoryId;
     if (nextCat.isEmpty()) {
+        nextCat = QStringLiteral("__all__");
+    }
+    auto catExists = [&](const QString& id) {
+        for (const auto& c : m_cachedDb.categories) {
+            if (c.id == id) return true;
+        }
+        return false;
+    };
+    if (m_cachedDb.categories.size() == 1) {
+        if (nextCat == QLatin1String("__all__") || !catExists(nextCat)) {
+            nextCat = m_cachedDb.categories.first().id;
+        }
+    } else if (nextCat != QLatin1String("__all__") && !catExists(nextCat)) {
         nextCat = QStringLiteral("__all__");
     }
     if (nextCat != m_activeCategoryId) {
         m_activeCategoryId = nextCat;
         emit activeCategoryIdChanged();
     }
-    const double w = qBound(560.0, db.windowWidth, 1600.0);
-    const double h = qBound(380.0, db.windowHeight, 1100.0);
-    if (!qFuzzyCompare(w, m_windowWidth) || !qFuzzyCompare(h, m_windowHeight)) {
-        m_windowWidth = w;
-        m_windowHeight = h;
+    const QSizeF sz = resolveWindowSize(m_cachedDb.windowWidth, m_cachedDb.windowHeight, m_userResized);
+    if (!qFuzzyCompare(sz.width(), m_windowWidth) || !qFuzzyCompare(sz.height(), m_windowHeight)) {
+        m_windowWidth = sz.width();
+        m_windowHeight = sz.height();
         emit windowSizeChanged();
     }
     emit databaseChanged();
     refreshItemFilter();
+    prewarmIcons();
 }
 
 void AppController::refreshItemFilter()
@@ -212,17 +246,42 @@ void AppController::refreshItemFilter()
     if (!m_store) {
         return;
     }
-    const LauncherDatabase db = m_store->snapshot();
-    const QList<SearchMatch> matches = PinyinMatcher::search(db, m_searchText, m_activeCategoryId, true);
+    const QList<SearchMatch> matches =
+        PinyinMatcher::search(m_searchIndex, m_searchText, m_activeCategoryId, true);
     m_itemModel->setMatches(matches);
 }
+
+void AppController::prewarmIcons()
+{
+    if (!m_iconProvider || m_cachedDb.items.isEmpty()) {
+        return;
+    }
+    QStringList keys;
+    keys.reserve(m_cachedDb.items.size());
+    for (const auto& it : m_cachedDb.items) {
+        const QString key = it.iconPath.trimmed().isEmpty()
+            ? it.target.trimmed()
+            : it.iconPath.trimmed();
+        if (!key.isEmpty()) {
+            keys.append(key);
+        }
+    }
+    if (!keys.isEmpty()) {
+        m_iconProvider->prewarmAsync(keys);
+    }
+}
+
 void AppController::setActiveCategoryId(const QString& categoryId)
 {
-    const QString next = categoryId.trimmed().isEmpty() ? QStringLiteral("__all__") : categoryId.trimmed();
+    QString next = categoryId.trimmed().isEmpty() ? QStringLiteral("__all__") : categoryId.trimmed();
+    if (m_cachedDb.categories.size() == 1 && next == QLatin1String("__all__")) {
+        next = m_cachedDb.categories.first().id;
+    }
     if (next == m_activeCategoryId) {
         return;
     }
     m_activeCategoryId = next;
+    m_cachedDb.activeCategoryId = m_activeCategoryId;
     emit activeCategoryIdChanged();
     if (m_store) {
         m_store->setActiveCategory(m_activeCategoryId);
@@ -246,7 +305,7 @@ QVariantList AppController::categoryChoices() const
     if (!m_store) {
         return list;
     }
-    const LauncherDatabase db = m_store->snapshot();
+    const LauncherDatabase& db = m_cachedDb;
     for (const auto& c : db.categories) {
         list.append(QVariantMap{
             {QStringLiteral("id"), c.id},
@@ -296,6 +355,11 @@ void AppController::showPopup()
     if (!ensureWindow()) {
         return;
     }
+    if (!m_searchText.isEmpty()) {
+        m_searchText.clear();
+        emit searchTextChanged();
+        refreshItemFilter();
+    }
     const bool wasVisible = m_window->isVisible();
     if (!wasVisible && m_theme->rememberWindowSize()) {
         m_window->setWidth(qRound(m_windowWidth));
@@ -304,8 +368,9 @@ void AppController::showPopup()
     if (!wasVisible || m_settings.showAtCursor) {
         ShellBridge::positionWindow(m_window.data(), m_settings.showAtCursor);
     }
+    m_lastShownTimer.restart();
     ShellBridge::activateWindow(m_window.data());
-    ShellBridge::applyWindowChrome(m_window.data(), m_theme->data());
+    emit popupShown();
     emit focusSearchRequested();
 }
 
@@ -340,6 +405,9 @@ void AppController::showSettingsDialog()
 
 void AppController::handleWindowDeactivated()
 {
+    if (m_lastShownTimer.isValid() && m_lastShownTimer.elapsed() < 200) {
+        return;
+    }
     if (m_standaloneMode || !m_settings.hideOnBlur || m_dialogOpen || m_pickingFile || !m_window) {
         return;
     }
@@ -356,11 +424,12 @@ void AppController::handleWindowDeactivated()
 
 void AppController::onWindowResized(double width, double height)
 {
-    const double w = qBound(560.0, width, 1600.0);
-    const double h = qBound(380.0, height, 1100.0);
+    const double w = qBound(500.0, width, 1600.0);
+    const double h = qBound(340.0, height, 1100.0);
     if (qFuzzyCompare(w, m_windowWidth) && qFuzzyCompare(h, m_windowHeight)) {
         return;
     }
+    m_userResized = true;
     m_windowWidth = w;
     m_windowHeight = h;
     if (m_theme->rememberWindowSize()) {
@@ -1011,6 +1080,29 @@ bool AppController::importBackupDialog()
     return true;
 }
 
+void AppController::openDataDir()
+{
+    if (m_dataDir.trimmed().isEmpty()) {
+        setStatus(QStringLiteral("数据目录尚未初始化"), true);
+        return;
+    }
+    QDir().mkpath(m_dataDir);
+    const QString nativeDir = QDir::toNativeSeparators(m_dataDir);
+    if (m_protocol) {
+        m_protocol->tool(QStringLiteral("open_item"),
+            QJsonObject{{QStringLiteral("path"), nativeDir}},
+            [this](const QJsonValue&, const QString& err) {
+                if (!err.isEmpty()) {
+                    setStatus(QStringLiteral("打开数据目录失败：%1").arg(err), true);
+                }
+            });
+        return;
+    }
+    if (!QDesktopServices::openUrl(QUrl::fromLocalFile(nativeDir))) {
+        setStatus(QStringLiteral("打开数据目录失败"), true);
+    }
+}
+
 QJsonObject AppController::buildQueryItem(const LaunchItem& item, const QString& categoryName, int score) const
 {
     const QString expanded = ShellBridge::expandPath(item.target);
@@ -1111,6 +1203,12 @@ void AppController::handleInitialize(const QJsonValue& id, const QJsonObject& pa
             {QStringLiteral("name"), QStringLiteral("快速启动面板")},
         });
     }
+
+    QTimer::singleShot(350, this, [this]() {
+        if (!m_window && m_initialized) {
+            ensureWindow();
+        }
+    });
 }
 
 void AppController::handleQuery(const QJsonValue& id, const QJsonObject& params, bool hasId)
@@ -1142,7 +1240,7 @@ void AppController::handleQuery(const QJsonValue& id, const QJsonObject& params,
         });
 
         if (m_store) {
-            const LauncherDatabase db = m_store->snapshot();
+            const LauncherDatabase& db = m_cachedDb;
             QHash<QString, QString> catNames;
             for (const auto& c : db.categories) {
                 catNames.insert(c.id, c.name);
@@ -1161,8 +1259,7 @@ void AppController::handleQuery(const QJsonValue& id, const QJsonObject& params,
             }
         }
     } else if (m_store) {
-        const LauncherDatabase db = m_store->snapshot();
-        const QList<SearchMatch> matches = PinyinMatcher::search(db, text, db.activeCategoryId, true);
+        const QList<SearchMatch> matches = PinyinMatcher::search(m_searchIndex, text, m_activeCategoryId, true);
         if (matches.isEmpty()) {
             items.append(QJsonObject{
                 {QStringLiteral("id"), QStringLiteral("__no_match__")},

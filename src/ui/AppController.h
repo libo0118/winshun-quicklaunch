@@ -2,10 +2,12 @@
 
 #include "core/LauncherStore.h"
 #include "core/Models.h"
+#include "core/PinyinMatcher.h"
 #include "platform/HotkeyService.h"
 #include "ui/LauncherModels.h"
 #include "ui/ThemeObject.h"
 
+#include <QElapsedTimer>
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QObject>
@@ -23,6 +25,7 @@ class QTimer;
 
 namespace ql {
 
+class IconProvider;
 class Protocol;
 
 class AppController : public QObject {
@@ -129,7 +132,9 @@ public:
     Q_INVOKABLE bool importMayeFromDialog();
     Q_INVOKABLE bool exportBackupDialog();
     Q_INVOKABLE bool importBackupDialog();
+    Q_INVOKABLE void openDataDir();
 signals:
+    void popupShown();
     void focusSearchRequested();
     void openSettingsRequested();
     void activeCategoryIdChanged();
@@ -147,6 +152,7 @@ private:
     bool ensureWindow();
     void refreshModels();
     void refreshItemFilter();
+    void prewarmIcons();
     void pushSettingsUpdate();
     void loadStandaloneSettings();
     void saveStandaloneSettings() const;
@@ -181,15 +187,20 @@ private:
     std::unique_ptr<HotkeyService> m_hotkeyService;
     std::unique_ptr<QQmlApplicationEngine> m_engine;
     QPointer<QQuickWindow> m_window;
+    IconProvider* m_iconProvider = nullptr;
 
+    LauncherDatabase m_cachedDb;
+    PinyinMatcher::SearchIndex m_searchIndex;
     PluginSettings m_settings;
     HotkeyStatus m_hotkeyStatus;
     QString m_activeCategoryId = QStringLiteral("__all__");
     QString m_searchText;
     QString m_statusMessage;
     bool m_statusError = false;
-    double m_windowWidth = 760.0;
-    double m_windowHeight = 520.0;
+    double m_windowWidth = 720.0;
+    double m_windowHeight = 490.0;
+    bool m_userResized = false;
+    QElapsedTimer m_lastShownTimer;
     QTimer* m_resizeSaveTimer = nullptr;
 };
 

@@ -1,5 +1,6 @@
 #include "platform/ShellBridge.h"
 
+#include <QColor>
 #include <QDir>
 #include <QFileInfo>
 #include <QWindow>
@@ -506,6 +507,11 @@ void ShellBridge::applyWindowChrome(QWindow* window, const ThemeData& theme)
     ::DwmSetWindowAttribute(hwnd, 20, &dark, sizeof(dark));
     const DWORD corner = theme.rounded ? 2 : 1;
     ::DwmSetWindowAttribute(hwnd, 33, &corner, sizeof(corner));
+    const QColor edgeColor(theme.windowEdge);
+    if (edgeColor.isValid()) {
+        const COLORREF borderColor = RGB(edgeColor.red(), edgeColor.green(), edgeColor.blue());
+        ::DwmSetWindowAttribute(hwnd, 34 /*DWMWA_BORDER_COLOR*/, &borderColor, sizeof(borderColor));
+    }
 }
 
 void ShellBridge::positionWindow(QWindow* window, bool nearCursor)

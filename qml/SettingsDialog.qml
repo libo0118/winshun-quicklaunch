@@ -147,9 +147,9 @@ Popup {
 
     component SettingBtn: Button {
         id: sbtn
-        implicitHeight: 30
-        leftPadding: 10
-        rightPadding: 10
+        implicitHeight: 32
+        leftPadding: 12
+        rightPadding: 12
         contentItem: Text {
             text: sbtn.text
             color: theme.text
@@ -159,9 +159,46 @@ Popup {
         }
         background: Rectangle {
             color: sbtn.down ? theme.pressed : (sbtn.hovered ? theme.controlHover : theme.control)
-            radius: theme.controlRadius
+            radius: Math.min(theme.controlRadius, 6)
             border.width: 1
             border.color: theme.controlBorder
+        }
+    }
+
+    component DialogCloseBtn: Button {
+        id: scbtn
+        implicitWidth: 30
+        implicitHeight: 30
+        padding: 0
+        hoverEnabled: true
+        contentItem: Canvas {
+            property color strokeColor: scbtn.hovered ? "#FFFFFF" : theme.subtext
+            onStrokeColorChanged: requestPaint()
+            onWidthChanged: requestPaint()
+            onHeightChanged: requestPaint()
+            onPaint: {
+                const ctx = getContext("2d")
+                ctx.reset()
+                const s = Math.min(width, height)
+                if (s <= 0) return
+                const c = strokeColor
+                ctx.strokeStyle = "rgba(" + Math.round(c.r * 255) + "," + Math.round(c.g * 255) + "," + Math.round(c.b * 255) + "," + c.a + ")"
+                ctx.lineWidth = 1.35
+                ctx.lineCap = "round"
+                const cx = width / 2
+                const cy = height / 2
+                const r = 4.5
+                ctx.beginPath()
+                ctx.moveTo(cx - r, cy - r)
+                ctx.lineTo(cx + r, cy + r)
+                ctx.moveTo(cx + r, cy - r)
+                ctx.lineTo(cx - r, cy + r)
+                ctx.stroke()
+            }
+        }
+        background: Rectangle {
+            color: scbtn.hovered ? theme.danger : "transparent"
+            radius: Math.min(theme.controlRadius, 6)
         }
     }
 
@@ -177,13 +214,26 @@ Popup {
             color: schk.checked ? theme.accentFill : theme.control
             border.width: 1
             border.color: schk.checked ? theme.accentFill : theme.controlBorder
-            Text {
-                anchors.centerIn: parent
-                text: "✓"
+            Canvas {
+                anchors.fill: parent
                 visible: schk.checked
-                color: theme.accentText
-                font.pixelSize: 11
-                font.weight: Font.Bold
+                property color strokeColor: theme.accentText
+                onStrokeColorChanged: requestPaint()
+                onVisibleChanged: if (visible) requestPaint()
+                onPaint: {
+                    const ctx = getContext("2d")
+                    ctx.reset()
+                    const c = strokeColor
+                    ctx.strokeStyle = "rgba(" + Math.round(c.r * 255) + "," + Math.round(c.g * 255) + "," + Math.round(c.b * 255) + "," + c.a + ")"
+                    ctx.lineWidth = 1.6
+                    ctx.lineCap = "round"
+                    ctx.lineJoin = "round"
+                    ctx.beginPath()
+                    ctx.moveTo(3.5, 8.2)
+                    ctx.lineTo(6.6, 11.2)
+                    ctx.lineTo(12.5, 4.8)
+                    ctx.stroke()
+                }
             }
         }
         contentItem: Text {
@@ -251,13 +301,13 @@ Popup {
 
         Rectangle {
             Layout.fillWidth: true
-            height: 44
+            height: 46
             color: "transparent"
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 16
-                anchors.rightMargin: 12
+                anchors.leftMargin: 18
+                anchors.rightMargin: 14
 
                 Text {
                     text: "快速启动面板设置"
@@ -267,10 +317,7 @@ Popup {
                     Layout.fillWidth: true
                 }
 
-                SettingBtn {
-                    text: "✕"
-                    implicitWidth: 28
-                    implicitHeight: 28
+                DialogCloseBtn {
                     onClicked: root.close()
                 }
             }
@@ -280,7 +327,7 @@ Popup {
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
                 height: 1
-                color: theme.divider
+                color: theme.withAlpha(theme.divider, 0.7)
             }
         }
         ScrollView {
@@ -292,14 +339,14 @@ Popup {
 
             ColumnLayout {
                 width: scrollArea.availableWidth
-                spacing: 14
+                spacing: 16
 
                 Item { height: 2 }
 
                 ColumnLayout {
                     Layout.fillWidth: true
-                    Layout.leftMargin: 16
-                    Layout.rightMargin: 16
+                    Layout.leftMargin: 18
+                    Layout.rightMargin: 18
                     spacing: 8
 
                     Text { text: "全局快捷键"; color: theme.subtext; font.pixelSize: 12; font.weight: Font.DemiBold }
@@ -402,13 +449,13 @@ Popup {
                         Layout.fillWidth: true
                     }
                 }
-                Rectangle { Layout.fillWidth: true; Layout.leftMargin: 16; Layout.rightMargin: 16; height: 1; color: theme.divider }
+                Rectangle { Layout.fillWidth: true; Layout.leftMargin: 18; Layout.rightMargin: 18; height: 1; color: theme.withAlpha(theme.divider, 0.7) }
 
                 ColumnLayout {
                     Layout.fillWidth: true
-                    Layout.leftMargin: 16
-                    Layout.rightMargin: 16
-                    spacing: 6
+                    Layout.leftMargin: 18
+                    Layout.rightMargin: 18
+                    spacing: 8
 
                     Text { text: "行为与外观"; color: theme.subtext; font.pixelSize: 12; font.weight: Font.DemiBold }
 
@@ -441,12 +488,12 @@ Popup {
                     }
                 }
 
-                Rectangle { Layout.fillWidth: true; Layout.leftMargin: 16; Layout.rightMargin: 16; height: 1; color: theme.divider }
+                Rectangle { Layout.fillWidth: true; Layout.leftMargin: 18; Layout.rightMargin: 18; height: 1; color: theme.withAlpha(theme.divider, 0.7) }
 
                 ColumnLayout {
                     Layout.fillWidth: true
-                    Layout.leftMargin: 16
-                    Layout.rightMargin: 16
+                    Layout.leftMargin: 18
+                    Layout.rightMargin: 18
                     spacing: 8
 
                     Text { text: "数据导入与备份"; color: theme.subtext; font.pixelSize: 12; font.weight: Font.DemiBold }
@@ -478,15 +525,19 @@ Popup {
                             text: "恢复备份 JSON..."
                             onClicked: controller.importBackupDialog()
                         }
+                        SettingBtn {
+                            text: "打开数据目录"
+                            onClicked: controller.openDataDir()
+                        }
                     }
                 }
 
-                Item { height: 4 }
+                Item { height: 6 }
             }
         }
         Rectangle {
             Layout.fillWidth: true
-            height: 52
+            height: 54
             color: "transparent"
 
             Rectangle {
@@ -494,13 +545,13 @@ Popup {
                 anchors.right: parent.right
                 anchors.top: parent.top
                 height: 1
-                color: theme.divider
+                color: theme.withAlpha(theme.divider, 0.7)
             }
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 16
-                anchors.rightMargin: 16
+                anchors.leftMargin: 18
+                anchors.rightMargin: 18
                 spacing: 8
 
                 Item { Layout.fillWidth: true }
@@ -527,7 +578,7 @@ Popup {
                     }
                     background: Rectangle {
                         color: saveSettingsBtn.down ? theme.pressed : (saveSettingsBtn.hovered ? theme.accent : theme.accentFill)
-                        radius: theme.controlRadius
+                        radius: Math.min(theme.controlRadius, 6)
                     }
                 }
             }

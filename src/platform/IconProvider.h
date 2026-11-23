@@ -1,30 +1,26 @@
 #pragma once
 
-#include <QHash>
 #include <QImage>
 #include <QQuickImageProvider>
 #include <QString>
+#include <QStringList>
 
-#include <deque>
-#include <mutex>
+#include <memory>
 
 namespace ql {
+
+struct IconCacheState;
 
 class IconProvider : public QQuickImageProvider {
 public:
     explicit IconProvider();
+    ~IconProvider() override;
 
     QImage requestImage(const QString& id, QSize* size, const QSize& requestedSize) override;
+    void prewarmAsync(const QStringList& iconKeys);
 
 private:
-    QImage extractIconImage(const QString& decodedId) const;
-    QImage fallbackIcon() const;
-
-    static constexpr int kMaxCacheEntries = 512;
-
-    mutable std::mutex m_mutex;
-    QHash<QString, QImage> m_cache;
-    std::deque<QString> m_order;
+    std::shared_ptr<IconCacheState> m_state;
 };
 
 } // namespace ql
