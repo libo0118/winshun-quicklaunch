@@ -102,6 +102,7 @@ struct IndexedItem {
     QString kwLower;
     QString kwInitials;
     QString remarkLower;
+    QString remarkInitials;
     QString targetLower;
     QString fileNameLower;
 };
@@ -113,6 +114,7 @@ IndexedItem buildIndexedItem(const LaunchItem& item) {
     idx.kwLower = item.keywords.toLower();
     idx.kwInitials = PinyinMatcher::initials(item.keywords);
     idx.remarkLower = item.remark.toLower();
+    idx.remarkInitials = PinyinMatcher::initials(item.remark);
     idx.targetLower = item.target.toLower();
     idx.fileNameLower = extractFileNameLower(item.target);
     return idx;
@@ -128,7 +130,8 @@ int scoreToken(const IndexedItem& idx, const QString& tok) {
         idx.fileNameLower.contains(tok)) {
         return 54;
     }
-    if (idx.remarkLower.contains(tok) || idx.targetLower.contains(tok)) {
+    if (idx.remarkLower.contains(tok) || idx.remarkInitials.contains(tok) ||
+        idx.targetLower.contains(tok)) {
         return 42;
     }
     return 0;
