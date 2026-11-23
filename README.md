@@ -43,7 +43,7 @@
 
 下载 `.wsplugin` 后安装启用：
 ```powershell
-ws plugin install .\libo0118.quicklaunch-0.2.0.wsplugin
+ws plugin install .\libo0118.quicklaunch-0.3.0.wsplugin
 ws plugin enable libo0118.quicklaunch
 ```
 

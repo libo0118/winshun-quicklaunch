@@ -12,7 +12,7 @@ ApplicationWindow {
     color: theme.page
     title: "快速启动面板"
     flags: Qt.Window | Qt.FramelessWindowHint | (controller.topMost ? Qt.WindowStaysOnTopHint : 0)
-    palette.window: theme.layer
+    palette.window: theme.surface
     palette.windowText: theme.text
     palette.base: theme.control
     palette.text: theme.text
@@ -23,7 +23,7 @@ ApplicationWindow {
     palette.toolTipBase: theme.menuBackground
     palette.toolTipText: theme.text
 
-    property bool searchActive: false
+    readonly property bool searchActive: controller.searchText.length > 0
     property bool keyboardNavActive: false
     property bool ctrlHeld: false
     property string draggingItemId: ""
@@ -33,13 +33,14 @@ ApplicationWindow {
     property string menuCatId: ""
     property string menuCatName: ""
     property int currentRow: 0
+    property int dbRevision: 0
     property Item hoverTipTarget: null
     property string hoverTipText: ""
 
-    readonly property int gridIconSize: controller.tileSize === "small" ? 32 : (controller.tileSize === "large" ? 50 : 42)
-    readonly property int gridCellWidth: controller.tileSize === "small" ? 82 : (controller.tileSize === "large" ? 118 : 98)
-    readonly property int gridCellHeight: controller.tileSize === "small" ? 80 : (controller.tileSize === "large" ? 110 : 94)
-    readonly property int gridCols: Math.max(1, Math.floor(gridView.width / gridCellWidth))
+    readonly property int gridIconSize: controller.tileSize === "small" ? 32 : (controller.tileSize === "large" ? 48 : 40)
+    readonly property int baseCellW: controller.tileSize === "small" ? 88 : (controller.tileSize === "large" ? 124 : 106)
+    readonly property int gridCellHeight: controller.tileSize === "small" ? 84 : (controller.tileSize === "large" ? 114 : 96)
+    readonly property int gridCols: Math.max(3, Math.floor(gridView.width / baseCellW))
 
     onActiveChanged: {
         if (!active) {
@@ -118,10 +119,7 @@ ApplicationWindow {
     }
 
     function enterSearch(initialText) {
-        if (!root.searchActive) {
-            root.searchActive = true
-            root.keyboardNavActive = false
-        }
+        root.keyboardNavActive = false
         if (initialText && initialText.length > 0) {
             searchField.text = searchField.text + initialText
         }
@@ -133,13 +131,13 @@ ApplicationWindow {
     function exitSearch() {
         searchField.text = ""
         controller.searchText = ""
-        root.searchActive = false
         root.keyboardNavActive = false
         keyRoot.forceActiveFocus()
         root.selectRow(0)
     }
 
     function currentCategoryTitle() {
+        const _rev = root.dbRevision
         const idx = controller.categoryModel.indexOfId(controller.activeCategoryId)
         return idx >= 0 ? controller.categoryModel.nameAt(idx) : "常用"
     }
@@ -173,15 +171,18 @@ ApplicationWindow {
     Connections {
         target: controller
         function onPopupShown() {
-            root.searchActive = false
             root.keyboardNavActive = false
             root.ctrlHeld = false
             searchField.text = ""
+            controller.searchText = ""
             keyRoot.forceActiveFocus()
             root.selectRow(0)
         }
         function onOpenSettingsRequested() { settingsDialog.openSettings() }
-        function onDatabaseChanged() { root.selectRow(root.currentRow < 0 ? 0 : root.currentRow) }
+        function onDatabaseChanged() {
+            ++root.dbRevision
+            root.selectRow(root.currentRow < 0 ? 0 : root.currentRow)
+        }
         function onStatusChanged() {
             if (controller.statusMessage.length > 0 && !controller.statusError) {
                 statusAutoClearTimer.restart()
@@ -189,6 +190,11 @@ ApplicationWindow {
                 statusAutoClearTimer.stop()
             }
         }
+    }
+
+    Connections {
+        target: controller.categoryModel
+        function onModelReset() { ++root.dbRevision }
     }
 
     Connections {
@@ -214,15 +220,52 @@ ApplicationWindow {
             const s = Math.min(width, height)
             if (s <= 0 || kind.length === 0) return
             const c = glyph.color
-            ctx.strokeStyle = "rgba(" + Math.round(c.r * 255) + "," + Math.round(c.g * 255) + "," + Math.round(c.b * 255) + "," + c.a + ")"
+            const rgba = "rgba(" + Math.round(c.r * 255) + "," + Math.round(c.g * 255) + "," + Math.round(c.b * 255) + "," + c.a + ")"
+            ctx.strokeStyle = rgba
+            ctx.fillStyle = rgba
             ctx.lineCap = "round"
             ctx.lineJoin = "round"
             ctx.translate((width - s) / 2, (height - s) / 2)
             ctx.scale(s / 16.0, s / 16.0)
             ctx.lineWidth = glyph.strokeWidth * (16.0 / s)
-            ctx.beginPath()
 
-            if (kind === "search") {
+            function roundedBox(x, y, w, h, r) {
+                ctx.moveTo(x + r, y)
+                ctx.lineTo(x + w - r, y)
+                ctx.arcTo(x + w, y, x + w, y + r, r)
+                ctx.lineTo(x + w, y + h - r)
+                ctx.arcTo(x + w, y + h, x + w - r, y + h, r)
+                ctx.lineTo(x + r, y + h)
+                ctx.arcTo(x, y + h, x, y + h - r, r)
+                ctx.lineTo(x, y + r)
+                ctx.arcTo(x, y, x + r, y, r)
+                ctx.closePath()
+            }
+
+            ctx.beginPath()
+            if (kind === "brand") {
+                roundedBox(2.0, 2.0, 5.2, 5.2, 1.5)
+                roundedBox(8.8, 2.0, 5.2, 5.2, 1.5)
+                roundedBox(2.0, 8.8, 5.2, 5.2, 1.5)
+                ctx.fill()
+                ctx.beginPath()
+                ctx.fillStyle = "rgba(" + Math.round(c.r * 255) + "," + Math.round(c.g * 255) + "," + Math.round(c.b * 255) + "," + (c.a * 0.55) + ")"
+                roundedBox(8.8, 8.8, 5.2, 5.2, 1.5)
+                ctx.fill()
+                return
+            } else if (kind === "grid") {
+                roundedBox(2.4, 2.4, 4.4, 4.4, 1.1)
+                roundedBox(9.2, 2.4, 4.4, 4.4, 1.1)
+                roundedBox(2.4, 9.2, 4.4, 4.4, 1.1)
+                roundedBox(9.2, 9.2, 4.4, 4.4, 1.1)
+            } else if (kind === "list") {
+                ctx.moveTo(2.8, 4.2); ctx.lineTo(3.0, 4.2)
+                ctx.moveTo(5.8, 4.2); ctx.lineTo(13.4, 4.2)
+                ctx.moveTo(2.8, 8.0); ctx.lineTo(3.0, 8.0)
+                ctx.moveTo(5.8, 8.0); ctx.lineTo(13.4, 8.0)
+                ctx.moveTo(2.8, 11.8); ctx.lineTo(3.0, 11.8)
+                ctx.moveTo(5.8, 11.8); ctx.lineTo(13.4, 11.8)
+            } else if (kind === "search") {
                 ctx.arc(6.8, 6.8, 4.2, 0, Math.PI * 2)
                 ctx.moveTo(9.9, 9.9)
                 ctx.lineTo(13.6, 13.6)
@@ -272,9 +315,10 @@ ApplicationWindow {
         property string kind: ""
         property string tip: ""
         property bool isClose: false
-        implicitWidth: 38
-        implicitHeight: 36
+        implicitWidth: 32
+        implicitHeight: 32
         padding: 0
+        focusPolicy: Qt.NoFocus
         hoverEnabled: true
         onHoveredChanged: {
             if (hovered && tip.length > 0) root.scheduleHoverTip(hbtn, tip, 450)
@@ -286,8 +330,8 @@ ApplicationWindow {
         contentItem: Item {
             VectorGlyph {
                 anchors.centerIn: parent
-                width: 15
-                height: 15
+                width: 14
+                height: 14
                 kind: hbtn.kind
                 color: (hbtn.isClose && (hbtn.hovered || hbtn.down))
                     ? "#FFFFFF"
@@ -342,7 +386,7 @@ ApplicationWindow {
             }
             if (event.key === Qt.Key_Escape) {
                 event.accepted = true
-                if (root.searchActive) {
+                if (searchField.text.length > 0 || root.searchActive) {
                     root.exitSearch()
                 } else if (controller.standaloneMode) {
                     root.close()
@@ -417,7 +461,7 @@ ApplicationWindow {
                 root.selectRow(root.currentRow - 1)
                 return
             }
-            if ((!root.searchActive || !searchField.activeFocus)
+            if (!searchField.activeFocus
                 && event.text.length > 0
                 && event.text.trim().length > 0
                 && event.text.charCodeAt(0) >= 32
@@ -440,8 +484,9 @@ ApplicationWindow {
             Rectangle {
                 id: headerBar
                 Layout.fillWidth: true
-                height: 38
-                color: theme.layer
+                Layout.preferredHeight: 48
+                height: 48
+                color: theme.surface
 
                 MouseArea {
                     anchors.fill: parent
@@ -451,155 +496,188 @@ ApplicationWindow {
 
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: 14
-                    anchors.rightMargin: 2
-                    spacing: 4
+                    anchors.leftMargin: 0
+                    anchors.rightMargin: 8
+                    spacing: 0
 
-                    Text {
-                        visible: !root.searchActive
-                        text: "快速启动"
-                        color: theme.subtext
-                        font.pixelSize: 13
-                        leftPadding: 2
-                    }
-
-                    Rectangle {
-                        visible: root.searchActive
-                        implicitWidth: backRow.implicitWidth + 14
-                        height: 28
-                        radius: Math.min(theme.controlRadius, 6)
-                        color: backMouse.pressed ? theme.pressed : (backMouse.containsMouse ? theme.hover : "transparent")
+                    Item {
+                        Layout.preferredWidth: 132
+                        Layout.fillHeight: true
 
                         Row {
-                            id: backRow
-                            anchors.centerIn: parent
-                            spacing: 5
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.left: parent.left
+                            anchors.leftMargin: 16
+                            spacing: 8
+
+                            VectorGlyph {
+                                width: 15
+                                height: 15
+                                anchors.verticalCenter: parent.verticalCenter
+                                kind: "brand"
+                                color: theme.accent
+                            }
+
+                            Text {
+                                text: "快速启动"
+                                color: theme.text
+                                font.pixelSize: 13
+                                font.weight: Font.DemiBold
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+                    }
+
+                    Item { Layout.fillWidth: true; Layout.preferredWidth: 0; Layout.minimumWidth: 6 }
+
+                    Rectangle {
+                        id: searchPill
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: 320
+                        Layout.maximumWidth: 320
+                        Layout.minimumWidth: 140
+                        Layout.alignment: Qt.AlignVCenter
+                        height: 30
+                        radius: 15
+                        color: theme.cardSurface
+                        border.width: 1
+                        border.color: searchField.activeFocus ? theme.accent : theme.softBorder
+                        Behavior on border.color { ColorAnimation { duration: 110 } }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.IBeamCursor
+                            onClicked: searchField.forceActiveFocus()
+                        }
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 11
+                            anchors.rightMargin: 8
+                            spacing: 6
+
                             VectorGlyph {
                                 width: 13
                                 height: 13
-                                anchors.verticalCenter: parent.verticalCenter
-                                kind: "back"
-                                color: backMouse.containsMouse ? theme.text : theme.subtext
+                                kind: "search"
+                                color: searchField.activeFocus ? theme.accent : theme.faint
                             }
-                            Text {
-                                text: "返回面板"
-                                color: backMouse.containsMouse ? theme.text : theme.subtext
-                                font.pixelSize: 13
-                                anchors.verticalCenter: parent.verticalCenter
+
+                            TextField {
+                                id: searchField
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                leftPadding: 0
+                                rightPadding: 0
+                                topPadding: 0
+                                bottomPadding: 0
+                                color: theme.text
+                                placeholderText: "搜索应用、拼音或首字母..."
+                                placeholderTextColor: theme.faint
+                                selectedTextColor: theme.accentText
+                                selectionColor: theme.accentFill
+                                font.pixelSize: 12
+                                verticalAlignment: TextInput.AlignVCenter
+                                background: Item {}
+                                Keys.forwardTo: [keyRoot]
+                                onTextChanged: {
+                                    controller.searchText = text
+                                    if (text.length > 0) {
+                                        root.keyboardNavActive = false
+                                        root.selectRow(0)
+                                    }
+                                }
+
+                                Connections {
+                                    target: controller
+                                    function onSearchTextChanged() {
+                                        if (searchField.text !== controller.searchText) {
+                                            searchField.text = controller.searchText
+                                        }
+                                    }
+                                }
                             }
-                        }
 
-                        MouseArea {
-                            id: backMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.exitSearch()
-                        }
-                    }
+                            Button {
+                                id: clearSearchBtn
+                                visible: searchField.text.length > 0
+                                implicitWidth: 20
+                                implicitHeight: 20
+                                padding: 0
+                                focusPolicy: Qt.NoFocus
+                                hoverEnabled: true
+                                onClicked: {
+                                    searchField.text = ""
+                                    searchField.forceActiveFocus()
+                                }
+                                contentItem: Item {
+                                    VectorGlyph {
+                                        anchors.centerIn: parent
+                                        width: 11
+                                        height: 11
+                                        kind: "clear"
+                                        color: clearSearchBtn.hovered ? theme.text : theme.subtext
+                                    }
+                                }
+                                background: Rectangle {
+                                    radius: 10
+                                    color: clearSearchBtn.hovered ? theme.hover : "transparent"
+                                }
+                            }
 
-                    Item { Layout.fillWidth: true }
+                            Rectangle {
+                                visible: searchField.text.length === 0 && !searchField.activeFocus
+                                implicitWidth: ctrlFTxt.implicitWidth + 10
+                                height: 18
+                                radius: 9
+                                color: theme.surface
+                                border.width: 1
+                                border.color: theme.softBorder
 
-                    TopIconBtn {
-                        kind: "search"
-                        tip: root.searchActive ? "退出搜索 (Esc)" : "搜索 (Ctrl+F 或直接打字)"
-                        onClicked: root.searchActive ? root.exitSearch() : root.enterSearch("")
-                    }
-
-                    TopIconBtn {
-                        id: menuBtn
-                        kind: "menu"
-                        tip: "更多功能"
-                        onClicked: {
-                            const pt = menuBtn.mapToItem(keyRoot, menuBtn.width - 186, menuBtn.height + 2)
-                            mainMenu.popup(keyRoot, pt.x, pt.y)
-                        }
-                    }
-
-                    TopIconBtn {
-                        kind: "close"
-                        isClose: true
-                        tip: controller.standaloneMode ? "退出" : "隐藏面板 (Esc)"
-                        onClicked: controller.standaloneMode ? root.close() : controller.hidePopup()
-                    }
-                }
-
-                Rectangle {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.bottom: parent.bottom
-                    height: 1
-                    color: theme.withAlpha(theme.divider, 0.7)
-                }
-            }
-            Rectangle {
-                id: searchBar
-                visible: root.searchActive
-                Layout.fillWidth: true
-                height: 44
-                color: theme.layer
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 16
-                    anchors.rightMargin: 14
-                    spacing: 10
-
-                    VectorGlyph {
-                        width: 15
-                        height: 15
-                        kind: "search"
-                        color: theme.subtext
-                    }
-
-                    TextField {
-                        id: searchField
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        color: theme.text
-                        placeholderText: "搜索程序名称、拼音首字母、路径或备注..."
-                        placeholderTextColor: theme.faint
-                        selectedTextColor: theme.accentText
-                        selectionColor: theme.accentFill
-                        font.pixelSize: 14
-                        verticalAlignment: TextInput.AlignVCenter
-                        background: Item {}
-                        Keys.forwardTo: [keyRoot]
-                        onTextChanged: controller.searchText = text
-
-                        Connections {
-                            target: controller
-                            function onSearchTextChanged() {
-                                if (searchField.text !== controller.searchText) {
-                                    searchField.text = controller.searchText
+                                Text {
+                                    id: ctrlFTxt
+                                    anchors.centerIn: parent
+                                    text: "Ctrl+F"
+                                    color: theme.faint
+                                    font.pixelSize: 10
                                 }
                             }
                         }
                     }
 
-                    Button {
-                        id: clearSearchBtn
-                        visible: searchField.text.length > 0
-                        implicitWidth: 26
-                        implicitHeight: 26
-                        padding: 0
-                        hoverEnabled: true
-                        onClicked: {
-                            searchField.text = ""
-                            searchField.forceActiveFocus()
+                    Item { Layout.fillWidth: true; Layout.preferredWidth: 0; Layout.minimumWidth: 6 }
+
+                    Row {
+                        spacing: 4
+                        Layout.alignment: Qt.AlignVCenter
+
+                        TopIconBtn {
+                            kind: "plus"
+                            tip: "添加启动项 (Ctrl+N)"
+                            onClicked: itemEditDialog.openNew(controller.activeCategoryId)
                         }
-                        contentItem: Item {
-                            VectorGlyph {
-                                anchors.centerIn: parent
-                                width: 13
-                                height: 13
-                                kind: "clear"
-                                color: clearSearchBtn.hovered ? theme.text : theme.subtext
+
+                        TopIconBtn {
+                            kind: controller.viewMode === "grid" ? "list" : "grid"
+                            tip: controller.viewMode === "grid" ? "切换为列表视图" : "切换为图标网格"
+                            onClicked: controller.viewMode = (controller.viewMode === "grid" ? "list" : "grid")
+                        }
+
+                        TopIconBtn {
+                            id: menuBtn
+                            kind: "menu"
+                            tip: "更多功能"
+                            onClicked: {
+                                const pt = menuBtn.mapToItem(keyRoot, menuBtn.width - 192, menuBtn.height + 4)
+                                mainMenu.popup(keyRoot, Math.max(8, pt.x), pt.y)
                             }
                         }
-                        background: Rectangle {
-                            color: clearSearchBtn.hovered ? theme.hover : "transparent"
-                            radius: Math.min(theme.controlRadius, 6)
+
+                        TopIconBtn {
+                            kind: "close"
+                            isClose: true
+                            tip: controller.standaloneMode ? "退出" : "隐藏面板 (Esc)"
+                            onClicked: controller.standaloneMode ? root.close() : controller.hidePopup()
                         }
                     }
                 }
@@ -609,7 +687,7 @@ ApplicationWindow {
                     anchors.right: parent.right
                     anchors.bottom: parent.bottom
                     height: 1
-                    color: theme.withAlpha(theme.divider, 0.7)
+                    color: theme.softBorder
                 }
             }
 
@@ -621,13 +699,10 @@ ApplicationWindow {
                 Rectangle {
                     id: sidebar
                     visible: !root.searchActive
-                    Layout.preferredWidth: 138
+                    Layout.preferredWidth: 132
                     Layout.fillHeight: true
-                    color: theme.layer
+                    color: theme.sidebarBackground
 
-                    HoverHandler {
-                        id: sidebarHover
-                    }
                     ColumnLayout {
                         anchors.fill: parent
                         spacing: 0
@@ -637,8 +712,8 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             Layout.topMargin: 8
-                            Layout.leftMargin: 6
-                            Layout.rightMargin: 6
+                            Layout.leftMargin: 8
+                            Layout.rightMargin: 8
                             Layout.bottomMargin: 4
                             spacing: 2
                             clip: true
@@ -653,10 +728,10 @@ ApplicationWindow {
 
                                 Rectangle {
                                     anchors.fill: parent
-                                    radius: Math.min(theme.controlRadius, 6)
+                                    radius: theme.rounded ? 8 : 0
                                     color: catDrop.containsDrag
                                         ? theme.withAlpha(theme.accent, 0.22)
-                                        : (isSelected ? theme.withAlpha(theme.accent, 0.13)
+                                        : (isSelected ? theme.withAlpha(theme.accent, theme.dark ? 0.20 : 0.11)
                                             : (catMouse.containsMouse ? theme.hover : "transparent"))
                                     border.width: catDrop.containsDrag ? 1 : 0
                                     border.color: theme.accent
@@ -666,24 +741,36 @@ ApplicationWindow {
                                         visible: isSelected
                                         width: 3
                                         height: 16
-                                        radius: 1.5
+                                        radius: theme.rounded ? 1.5 : 0
                                         color: theme.accent
                                         anchors.left: parent.left
-                                        anchors.leftMargin: 3
+                                        anchors.leftMargin: 4
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
 
-                                    Text {
+                                    RowLayout {
                                         anchors.fill: parent
-                                        anchors.leftMargin: 10
+                                        anchors.leftMargin: 14
                                         anchors.rightMargin: 10
-                                        text: name
-                                        color: isSelected ? theme.text : theme.subtext
-                                        font.pixelSize: 13
-                                        font.weight: isSelected ? Font.DemiBold : Font.Normal
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
-                                        elide: Text.ElideRight
+                                        spacing: 6
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: name
+                                            color: isSelected ? theme.text : theme.subtext
+                                            font.pixelSize: 13
+                                            font.weight: isSelected ? Font.DemiBold : Font.Normal
+                                            horizontalAlignment: Text.AlignLeft
+                                            verticalAlignment: Text.AlignVCenter
+                                            elide: Text.ElideRight
+                                        }
+
+                                        Text {
+                                            text: count
+                                            color: theme.faint
+                                            font.pixelSize: 11
+                                            verticalAlignment: Text.AlignVCenter
+                                        }
                                     }
                                 }
 
@@ -731,15 +818,13 @@ ApplicationWindow {
                         Button {
                             id: addCatBtn
                             Layout.fillWidth: true
-                            Layout.leftMargin: 6
-                            Layout.rightMargin: 6
+                            Layout.leftMargin: 8
+                            Layout.rightMargin: 8
                             Layout.bottomMargin: 8
-                            height: 30
+                            height: 32
                             padding: 0
+                            focusPolicy: Qt.NoFocus
                             hoverEnabled: true
-                            opacity: (sidebarHover.hovered || addCatBtn.hovered) ? 1.0 : 0.0
-                            enabled: opacity > 0.1
-                            Behavior on opacity { NumberAnimation { duration: 150 } }
                             onClicked: categoryPrompt.openCreate()
 
                             contentItem: Item {
@@ -763,7 +848,9 @@ ApplicationWindow {
                             }
                             background: Rectangle {
                                 color: addCatBtn.down ? theme.pressed : (addCatBtn.hovered ? theme.hover : "transparent")
-                                radius: Math.min(theme.controlRadius, 6)
+                                radius: theme.rounded ? 8 : 0
+                                border.width: addCatBtn.hovered ? 1 : 0
+                                border.color: theme.softBorder
                             }
                         }
                     }
@@ -773,7 +860,7 @@ ApplicationWindow {
                         anchors.bottom: parent.bottom
                         anchors.right: parent.right
                         width: 1
-                        color: theme.withAlpha(theme.divider, 0.7)
+                        color: theme.softBorder
                     }
                 }
 
@@ -908,7 +995,9 @@ ApplicationWindow {
                                         implicitWidth: sCatTxt.implicitWidth + 12
                                         height: 20
                                         radius: Math.min(theme.controlRadius, 6)
-                                        color: theme.withAlpha(theme.control, 0.85)
+                                        color: theme.cardSurface
+                                        border.width: 1
+                                        border.color: theme.softBorder
                                         Text {
                                             id: sCatTxt
                                             anchors.centerIn: parent
@@ -923,9 +1012,9 @@ ApplicationWindow {
                                         implicitWidth: sHintTxt.implicitWidth + 10
                                         height: 20
                                         radius: Math.min(theme.controlRadius, 6)
-                                        color: theme.control
+                                        color: theme.cardSurface
                                         border.width: 1
-                                        border.color: theme.withAlpha(theme.divider, 0.8)
+                                        border.color: theme.softBorder
                                         Text {
                                             id: sHintTxt
                                             anchors.centerIn: parent
@@ -970,7 +1059,10 @@ ApplicationWindow {
                         id: gridView
                         visible: !root.searchActive && controller.viewMode === "grid" && count > 0
                         anchors.fill: parent
-                        anchors.margins: 16
+                        anchors.leftMargin: 18
+                        anchors.rightMargin: 18
+                        anchors.topMargin: 14
+                        anchors.bottomMargin: 10
                         cellWidth: Math.floor(width / root.gridCols)
                         cellHeight: root.gridCellHeight
                         cacheBuffer: 480
@@ -997,8 +1089,8 @@ ApplicationWindow {
                                     ? theme.pressed
                                     : (cardMouse.containsMouse ? theme.hover
                                         : (showFocus ? theme.withAlpha(theme.accent, 0.14) : "transparent"))
-                                border.width: showFocus ? 1 : 0
-                                border.color: theme.accent
+                                border.width: (showFocus || cardMouse.containsMouse || cardMouse.pressed) ? 1 : 0
+                                border.color: showFocus ? theme.accent : theme.softBorder
                                 scale: cardMouse.pressed ? 0.96 : 1.0
                                 Behavior on color { ColorAnimation { duration: 90 } }
                                 Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutQuad } }
@@ -1034,9 +1126,9 @@ ApplicationWindow {
                                     implicitWidth: hintTxt.implicitWidth + 6
                                     height: 15
                                     radius: theme.rounded ? 4 : 0
-                                    color: theme.withAlpha(theme.control, 0.92)
+                                    color: theme.surface
                                     border.width: 1
-                                    border.color: theme.divider
+                                    border.color: theme.softBorder
                                     Text {
                                         id: hintTxt
                                         anchors.centerIn: parent
@@ -1048,9 +1140,9 @@ ApplicationWindow {
 
                                 Column {
                                     anchors.horizontalCenter: parent.horizontalCenter
-                                    width: parent.width - 10
-                                    y: controller.tileSize === "small" ? 5 : (controller.tileSize === "large" ? 10 : 7)
-                                    spacing: 7
+                                    width: parent.width
+                                    y: controller.tileSize === "small" ? 6 : (controller.tileSize === "large" ? 11 : 8)
+                                    spacing: controller.tileSize === "small" ? 5 : (controller.tileSize === "large" ? 8 : 6)
 
                                     Item {
                                         anchors.horizontalCenter: parent.horizontalCenter
@@ -1087,13 +1179,14 @@ ApplicationWindow {
                                     }
 
                                     Text {
-                                        width: parent.width
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        width: parent.width - 8
                                         text: name
                                         color: theme.text
                                         font.pixelSize: 12
-                                        lineHeight: 1.08
+                                        lineHeight: 1.15
                                         horizontalAlignment: Text.AlignHCenter
-                                        wrapMode: Text.WrapAnywhere
+                                        wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                                         maximumLineCount: 2
                                         elide: Text.ElideRight
                                     }
@@ -1275,7 +1368,9 @@ ApplicationWindow {
                                         implicitWidth: catTagTxt.implicitWidth + 10
                                         height: 18
                                         radius: Math.min(theme.controlRadius, 6)
-                                        color: theme.control
+                                        color: theme.cardSurface
+                                        border.width: 1
+                                        border.color: theme.softBorder
                                         Text {
                                             id: catTagTxt
                                             anchors.centerIn: parent
@@ -1292,9 +1387,9 @@ ApplicationWindow {
                                         implicitWidth: listHintTxt.implicitWidth + 8
                                         height: 18
                                         radius: Math.min(theme.controlRadius, 6)
-                                        color: theme.control
+                                        color: theme.cardSurface
                                         border.width: 1
-                                        border.color: theme.divider
+                                        border.color: theme.softBorder
                                         Text {
                                             id: listHintTxt
                                             anchors.centerIn: parent
@@ -1406,6 +1501,7 @@ ApplicationWindow {
                                 implicitHeight: 30
                                 leftPadding: 14
                                 rightPadding: 14
+                                focusPolicy: Qt.NoFocus
                                 onClicked: itemEditDialog.openNew(controller.activeCategoryId)
                                 contentItem: Text {
                                     text: emptyAddBtn.text
@@ -1427,6 +1523,7 @@ ApplicationWindow {
                                 implicitHeight: 30
                                 leftPadding: 14
                                 rightPadding: 14
+                                focusPolicy: Qt.NoFocus
                                 onClicked: controller.importMayeDefault()
                                 contentItem: Text {
                                     text: emptyImportBtn.text
@@ -1477,6 +1574,64 @@ ApplicationWindow {
                     }
                 }
             }
+
+            Rectangle {
+                id: statusFooter
+                Layout.fillWidth: true
+                Layout.preferredHeight: 28
+                height: 28
+                color: theme.sidebarBackground
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    height: 1
+                    color: theme.softBorder
+                }
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 14
+                    anchors.rightMargin: 14
+                    spacing: 8
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: root.searchActive
+                            ? ("找到 " + searchListView.count + " 项")
+                            : (root.currentCategoryTitle() + " · " + root.activeViewCount() + " 项")
+                        color: theme.faint
+                        font.pixelSize: 11
+                        elide: Text.ElideRight
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    Text {
+                        text: "拖入添加 · 右键管理 · " + (controller.hotkeyKey.length > 0 ? controller.hotkeyKey : "Alt+1")
+                        color: theme.faint
+                        font.pixelSize: 11
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    Text {
+                        text: "设置"
+                        color: footerSetMouse.containsMouse ? theme.accent : theme.subtext
+                        font.pixelSize: 11
+                        font.underline: footerSetMouse.containsMouse
+                        verticalAlignment: Text.AlignVCenter
+
+                        MouseArea {
+                            id: footerSetMouse
+                            anchors.fill: parent
+                            anchors.margins: -4
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: settingsDialog.openSettings()
+                        }
+                    }
+                }
+            }
         }
 
         Rectangle {
@@ -1485,11 +1640,11 @@ ApplicationWindow {
             z: 40
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottom: parent.bottom
-            anchors.bottomMargin: 12
+            anchors.bottomMargin: statusFooter.height + 10
             width: Math.min(parent.width - 40, conflictRow.implicitWidth + 20)
             height: 30
             radius: 15
-            color: theme.layer
+            color: theme.surface
             border.width: 1
             border.color: theme.withAlpha(theme.danger, 0.65)
 
@@ -1539,13 +1694,13 @@ ApplicationWindow {
             z: 41
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottom: hotkeyConflictBanner.visible ? hotkeyConflictBanner.top : parent.bottom
-            anchors.bottomMargin: hotkeyConflictBanner.visible ? 8 : 14
+            anchors.bottomMargin: hotkeyConflictBanner.visible ? 8 : (statusFooter.height + 10)
             width: Math.min(parent.width - 48, toastRow.implicitWidth + 24)
             height: 32
             radius: 16
-            color: controller.statusError ? theme.layer : theme.menuBackground
+            color: controller.statusError ? theme.surface : theme.menuBackground
             border.width: 1
-            border.color: controller.statusError ? theme.withAlpha(theme.danger, 0.7) : theme.controlBorder
+            border.color: controller.statusError ? theme.withAlpha(theme.danger, 0.7) : theme.softBorder
 
             RowLayout {
                 id: toastRow
@@ -1631,7 +1786,7 @@ ApplicationWindow {
             color: theme.menuBackground
             radius: Math.min(theme.controlRadius, 8)
             border.width: 1
-            border.color: theme.controlBorder
+            border.color: theme.softBorder
         }
 
         StyledMenuItem { text: "添加启动项 (Ctrl+N)"; onTriggered: itemEditDialog.openNew(controller.activeCategoryId) }
@@ -1640,7 +1795,7 @@ ApplicationWindow {
             text: controller.hasDefaultMayeFile ? "一键导入 MayeNano (MDB.json)" : "导入 MayeNano (选择文件)..."
             onTriggered: controller.hasDefaultMayeFile ? controller.importMayeDefault() : controller.importMayeFromDialog()
         }
-        MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: theme.divider } }
+        MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: theme.softBorder } }
         StyledMenuItem {
             text: controller.viewMode === "grid" ? "切换为列表视图" : "切换为图标网格"
             onTriggered: controller.viewMode = (controller.viewMode === "grid" ? "list" : "grid")
@@ -1653,13 +1808,13 @@ ApplicationWindow {
                 color: theme.menuBackground
                 radius: Math.min(theme.controlRadius, 8)
                 border.width: 1
-                border.color: theme.controlBorder
+                border.color: theme.softBorder
             }
             StyledMenuItem { text: (controller.tileSize === "small" ? "● " : "   ") + "小图标 (32px)"; onTriggered: controller.tileSize = "small" }
-            StyledMenuItem { text: (controller.tileSize === "medium" ? "● " : "   ") + "中等图标 (42px)"; onTriggered: controller.tileSize = "medium" }
-            StyledMenuItem { text: (controller.tileSize === "large" ? "● " : "   ") + "大图标 (50px)"; onTriggered: controller.tileSize = "large" }
+            StyledMenuItem { text: (controller.tileSize === "medium" ? "● " : "   ") + "中等图标 (40px)"; onTriggered: controller.tileSize = "medium" }
+            StyledMenuItem { text: (controller.tileSize === "large" ? "● " : "   ") + "大图标 (48px)"; onTriggered: controller.tileSize = "large" }
         }
-        MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: theme.divider } }
+        MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: theme.softBorder } }
         StyledMenuItem { text: "设置 (Ctrl+,)"; onTriggered: settingsDialog.openSettings() }
     }
 
@@ -1671,14 +1826,14 @@ ApplicationWindow {
             color: theme.menuBackground
             radius: Math.min(theme.controlRadius, 8)
             border.width: 1
-            border.color: theme.controlBorder
+            border.color: theme.softBorder
         }
 
         StyledMenuItem { text: "启动"; onTriggered: controller.launchItem(root.menuItemId, false) }
         StyledMenuItem { text: "以管理员身份运行"; onTriggered: controller.launchItem(root.menuItemId, true) }
         StyledMenuItem { text: "打开所在文件夹"; onTriggered: controller.revealItem(root.menuItemId) }
         StyledMenuItem { text: "复制目标路径"; onTriggered: controller.copyItemTarget(root.menuItemId) }
-        MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: theme.divider } }
+        MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: theme.softBorder } }
         StyledMenuItem { text: "编辑..."; onTriggered: itemEditDialog.openEdit(root.menuItemId) }
         Menu {
             id: moveSubMenu
@@ -1689,12 +1844,12 @@ ApplicationWindow {
                 color: theme.menuBackground
                 radius: Math.min(theme.controlRadius, 8)
                 border.width: 1
-                border.color: theme.controlBorder
+                border.color: theme.softBorder
             }
         }
         StyledMenuItem { text: "前移"; onTriggered: controller.moveItemOrder(root.menuItemId, -1) }
         StyledMenuItem { text: "后移"; onTriggered: controller.moveItemOrder(root.menuItemId, 1) }
-        MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: theme.divider } }
+        MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: theme.softBorder } }
         StyledMenuItem { text: "删除"; onTriggered: controller.deleteItem(root.menuItemId) }
     }
 
@@ -1706,13 +1861,13 @@ ApplicationWindow {
             color: theme.menuBackground
             radius: Math.min(theme.controlRadius, 8)
             border.width: 1
-            border.color: theme.controlBorder
+            border.color: theme.softBorder
         }
 
         StyledMenuItem { text: "重命名分组..."; onTriggered: categoryPrompt.openRename(root.menuCatId, root.menuCatName) }
         StyledMenuItem { text: "上移分组"; onTriggered: controller.moveCategoryOrder(root.menuCatId, -1) }
         StyledMenuItem { text: "下移分组"; onTriggered: controller.moveCategoryOrder(root.menuCatId, 1) }
-        MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: theme.divider } }
+        MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: theme.softBorder } }
         StyledMenuItem { text: "删除分组"; onTriggered: controller.deleteCategory(root.menuCatId) }
     }
 
@@ -1759,7 +1914,7 @@ ApplicationWindow {
 
         Overlay.modal: Rectangle { color: theme.withAlpha("#000000", theme.dark ? 0.52 : 0.32) }
         background: Rectangle {
-            color: theme.layer
+            color: theme.surface
             radius: Math.min(theme.cardRadius, 10)
             border.width: 1
             border.color: theme.windowEdge

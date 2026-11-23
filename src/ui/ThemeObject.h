@@ -36,6 +36,10 @@ class ThemeObject : public QObject {
     Q_PROPERTY(QColor accentFill READ accentFill NOTIFY changed)
     Q_PROPERTY(QColor accentText READ accentText NOTIFY changed)
     Q_PROPERTY(QColor danger READ danger NOTIFY changed)
+    Q_PROPERTY(QColor surface READ surface NOTIFY changed)
+    Q_PROPERTY(QColor sidebarBackground READ sidebarBackground NOTIFY changed)
+    Q_PROPERTY(QColor cardSurface READ cardSurface NOTIFY changed)
+    Q_PROPERTY(QColor softBorder READ softBorder NOTIFY changed)
 
 public:
     explicit ThemeObject(QObject* parent = nullptr);
@@ -69,6 +73,10 @@ public:
     QColor accentFill() const { return QColor(m_data.accentFill); }
     QColor accentText() const { return QColor(m_data.accentText); }
     QColor danger() const { return QColor(m_data.danger); }
+    QColor surface() const;
+    QColor sidebarBackground() const;
+    QColor cardSurface() const;
+    QColor softBorder() const;
 
     Q_INVOKABLE QColor withAlpha(const QColor& color, qreal alpha) const;
 

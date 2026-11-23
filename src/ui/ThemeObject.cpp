@@ -18,6 +18,16 @@ auto themeTuple(const ThemeData& d) {
         d.accent, d.accentFill, d.accentText, d.danger);
 }
 
+QColor opaquePageColor(const ThemeData& d)
+{
+    return QColor(blendOverOpaque(d.page, defaultPageBaseHex(d.dark)));
+}
+
+QColor opaqueLayerColor(const ThemeData& d)
+{
+    return QColor(blendOverOpaque(d.layer, opaquePageColor(d).name(QColor::HexArgb)));
+}
+
 } // namespace
 
 ThemeObject::ThemeObject(QObject* parent)
@@ -39,6 +49,41 @@ QColor ThemeObject::withAlpha(const QColor& color, qreal alpha) const
     QColor copy = color;
     copy.setAlphaF(std::clamp(static_cast<double>(alpha), 0.0, 1.0));
     return copy;
+}
+
+QColor ThemeObject::surface() const
+{
+    if (!m_data.dark) {
+        return QColor(QStringLiteral("#FFFFFF"));
+    }
+    // Lift composited dark layer slightly with white so floating dialogs stay distinct and opaque.
+    return blendColors(QColor(QStringLiteral("#FFFFFFFF")), opaqueLayerColor(m_data), 0.06);
+}
+
+QColor ThemeObject::sidebarBackground() const
+{
+    const QColor pageColor = opaquePageColor(m_data);
+    if (!m_data.dark) {
+        return blendColors(QColor(QStringLiteral("#FFEEF1F6")), pageColor, 0.80);
+    }
+    return blendColors(QColor(QStringLiteral("#FF181A1F")), pageColor, 0.75);
+}
+
+QColor ThemeObject::cardSurface() const
+{
+    if (!m_data.dark) {
+        return QColor(QStringLiteral("#FFF4F5F8"));
+    }
+    return blendColors(QColor(QStringLiteral("#FF2C2F37")), opaqueLayerColor(m_data), 0.70);
+}
+
+QColor ThemeObject::softBorder() const
+{
+    const QColor pageColor = opaquePageColor(m_data);
+    if (!m_data.dark) {
+        return blendColors(QColor(QStringLiteral("#FF0F172A")), pageColor, 0.08);
+    }
+    return blendColors(QColor(QStringLiteral("#FFFFFFFF")), pageColor, 0.09);
 }
 
 } // namespace ql

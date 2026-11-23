@@ -507,11 +507,18 @@ void ShellBridge::applyWindowChrome(QWindow* window, const ThemeData& theme)
     ::DwmSetWindowAttribute(hwnd, 20, &dark, sizeof(dark));
     const DWORD corner = theme.rounded ? 2 : 1;
     ::DwmSetWindowAttribute(hwnd, 33, &corner, sizeof(corner));
-    const QColor edgeColor(theme.windowEdge);
-    if (edgeColor.isValid()) {
-        const COLORREF borderColor = RGB(edgeColor.red(), edgeColor.green(), edgeColor.blue());
-        ::DwmSetWindowAttribute(hwnd, 34 /*DWMWA_BORDER_COLOR*/, &borderColor, sizeof(borderColor));
+    const QColor pageColor(blendOverOpaque(theme.page, defaultPageBaseHex(theme.dark)));
+    QColor edgeColor(theme.windowEdge);
+    if (edgeColor.isValid() && edgeColor.alpha() < 255) {
+        edgeColor = blendColors(edgeColor, pageColor, static_cast<double>(edgeColor.alpha()) / 255.0);
     }
+    const bool isPureBlack = edgeColor.isValid()
+        && edgeColor.red() == 0 && edgeColor.green() == 0 && edgeColor.blue() == 0;
+    if (!edgeColor.isValid() || isPureBlack || (!theme.dark && edgeColor.lightness() < 140)) {
+        edgeColor = QColor(theme.dark ? QStringLiteral("#FF363942") : QStringLiteral("#FFD5D9E2"));
+    }
+    const COLORREF borderColor = RGB(edgeColor.red(), edgeColor.green(), edgeColor.blue());
+    ::DwmSetWindowAttribute(hwnd, 34 /*DWMWA_BORDER_COLOR*/, &borderColor, sizeof(borderColor));
 }
 
 void ShellBridge::positionWindow(QWindow* window, bool nearCursor)
@@ -527,8 +534,8 @@ void ShellBridge::positionWindow(QWindow* window, bool nearCursor)
         return;
 
     const double dpr = (window->devicePixelRatio() > 0.0) ? window->devicePixelRatio() : 1.0;
-    const int logicalW = window->width() > 0 ? window->width() : 760;
-    const int logicalH = window->height() > 0 ? window->height() : 520;
+    const int logicalW = window->width() > 0 ? window->width() : 720;
+    const int logicalH = window->height() > 0 ? window->height() : 490;
     const LONG winW = static_cast<LONG>(qRound(logicalW * dpr));
     const LONG winH = static_cast<LONG>(qRound(logicalH * dpr));
     const RECT& work = mi.rcWork;

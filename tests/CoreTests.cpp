@@ -5,6 +5,7 @@
 #include "platform/ShellBridge.h"
 #include "ui/ThemeObject.h"
 
+#include <QColor>
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -294,6 +295,79 @@ void testThemeData()
     QL_CHECK(changes == 1);
 }
 
+void testThemeAlphaNormalization()
+{
+    const QJsonObject winshunLightLook{
+        {QStringLiteral("dark"), false},
+        {QStringLiteral("rounded"), true},
+        {QStringLiteral("page"), QStringLiteral("#E6F3F3F3")},
+        {QStringLiteral("layer"), QStringLiteral("#B3FFFFFF")},
+        {QStringLiteral("menuBackground"), QStringLiteral("#CCFFFFFF")},
+        {QStringLiteral("divider"), QStringLiteral("#14000000")},
+        {QStringLiteral("windowEdge"), QStringLiteral("#26000000")},
+    };
+    const ql::ThemeData normalized = ql::ThemeData::fromAppearance(
+        QStringLiteral("zh"), QStringLiteral("light"),
+        QJsonObject{{QStringLiteral("nativeLook"), winshunLightLook}});
+
+    QL_CHECK(!normalized.dark);
+    for (const QString& hex : {
+             normalized.page, normalized.background, normalized.layer,
+             normalized.menuBackground, normalized.control,
+             normalized.windowEdge, normalized.divider, normalized.controlBorder}) {
+        const QColor c(hex);
+        QL_CHECK(c.isValid() && c.alpha() == 255);
+    }
+    QL_CHECK(QColor(normalized.windowEdge).red() >= 180);
+    QL_CHECK(QColor(normalized.divider).red() >= 200);
+
+    const QJsonObject harshLightLook{
+        {QStringLiteral("dark"), false},
+        {QStringLiteral("page"), QStringLiteral("#FFF8F9FB")},
+        {QStringLiteral("windowEdge"), QStringLiteral("#FF101010")},
+        {QStringLiteral("divider"), QStringLiteral("#FF202020")},
+        {QStringLiteral("controlBorder"), QStringLiteral("#FF151515")},
+    };
+    const ql::ThemeData softened = ql::ThemeData::fromAppearance(
+        QStringLiteral("zh"), QStringLiteral("light"),
+        QJsonObject{{QStringLiteral("nativeLook"), harshLightLook}});
+    QL_CHECK(QColor(softened.windowEdge).alpha() == 255 && QColor(softened.windowEdge).red() >= 180);
+    QL_CHECK(QColor(softened.divider).alpha() == 255 && QColor(softened.divider).red() >= 200);
+    QL_CHECK(QColor(softened.controlBorder).alpha() == 255 && QColor(softened.controlBorder).red() >= 180);
+
+    ql::ThemeObject lightObj;
+    lightObj.update(normalized);
+    QL_CHECK(lightObj.surface() == QColor(QStringLiteral("#FFFFFF")));
+    for (const QColor& c : {
+             lightObj.surface(), lightObj.sidebarBackground(),
+             lightObj.cardSurface(), lightObj.softBorder()}) {
+        QL_CHECK(c.isValid() && c.alpha() == 255);
+    }
+
+    const ql::ThemeData darkNormalized = ql::ThemeData::fromAppearance(
+        QStringLiteral("zh"), QStringLiteral("dark"),
+        QJsonObject{{QStringLiteral("nativeLook"), QJsonObject{
+            {QStringLiteral("dark"), true},
+            {QStringLiteral("page"), QStringLiteral("#E61C1E22")},
+            {QStringLiteral("layer"), QStringLiteral("#B32A2C32")},
+            {QStringLiteral("menuBackground"), QStringLiteral("#CC25262B")},
+        }}});
+    QL_CHECK(QColor(darkNormalized.page).alpha() == 255);
+    QL_CHECK(QColor(darkNormalized.layer).alpha() == 255);
+    QL_CHECK(QColor(darkNormalized.menuBackground).alpha() == 255);
+
+    ql::ThemeObject darkObj;
+    darkObj.update(darkNormalized);
+    for (const QColor& c : {
+             darkObj.surface(), darkObj.sidebarBackground(),
+             darkObj.cardSurface(), darkObj.softBorder()}) {
+        QL_CHECK(c.isValid() && c.alpha() == 255);
+    }
+    QL_CHECK(darkObj.surface() != darkObj.layer());
+    QL_CHECK(ql::blendOverOpaque(QStringLiteral("#00FFFFFF"), QStringLiteral("#FF112233"))
+             == QStringLiteral("#FF112233"));
+}
+
 void testMayeNanoImporter()
 {
     QTemporaryDir tempDir;
@@ -382,6 +456,7 @@ int main(int argc, char* argv[])
     testMayeNanoImporter();
     testShellBridge();
     testThemeData();
+    testThemeAlphaNormalization();
     if (g_failures > 0) {
         std::cerr << "[CoreTests] FAILED: " << g_failures << " assertion(s) failed\n";
         return EXIT_FAILURE;
