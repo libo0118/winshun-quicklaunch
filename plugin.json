@@ -1,0 +1,150 @@
+{
+  "$schema": "https://raw.githubusercontent.com/LingCore/WinShun-plugins/main/schema/plugin.schema.json",
+  "manifest": 1,
+  "id": "libo0118.quicklaunch",
+  "name": {
+    "zh": "快速启动面板",
+    "en": "Quick Launch Panel"
+  },
+  "version": "0.1.0",
+  "minWinShun": "0.25.0",
+  "description": {
+    "zh": "仿 MayeNano 风格 C++ 原生快速启动面板：默认 Alt+1 一键呼出，支持分组分类、拖拽添加、拼音搜索与导入 MayeNano。",
+    "en": "MayeNano-style native C++/Qt quick launch panel: press Alt+1 to toggle, manage categories, drag-and-drop apps, search with pinyin, and import MayeNano."
+  },
+  "author": "libo0118",
+  "homepage": "https://github.com/libo0118/winshun-quicklaunch",
+  "license": "MIT",
+  "runtime": {
+    "mode": "resident",
+    "program": "QuickLaunch.exe",
+    "qt": "host",
+    "qtVersion": "6.12.0",
+    "start": "eager",
+    "sandbox": "normal",
+    "timeoutMs": 3000,
+    "debounceMs": 0,
+    "idleExitSec": 0,
+    "memoryMB": 256,
+    "encoding": "utf-8"
+  },
+  "permissions": [
+    "ui",
+    "processes",
+    "winshun:open"
+  ],
+  "trayMenu": {
+    "zh": "快速启动面板",
+    "en": "Quick Launch"
+  },
+  "settingsWindow": true,
+  "commands": [
+    {
+      "id": "ql",
+      "keyword": ["ql", "maye", "启动面板"],
+      "title": {
+        "zh": "快速启动面板",
+        "en": "Quick Launch Panel"
+      },
+      "description": {
+        "zh": "打开快捷面板或按名称、拼音首字母搜索并启动已收录程序",
+        "en": "Open the launch panel or search saved apps by name or pinyin"
+      },
+      "hint": {
+        "zh": "输入名称/拼音筛选；Enter 启动或打开面板，Ctrl+Enter 定位文件，Shift+Enter 打开独立面板",
+        "en": "Type to filter; Enter launches or opens panel, Ctrl+Enter reveals file, Shift+Enter opens panel"
+      },
+      "icon": "ph:rocket-launch",
+      "mode": "list",
+      "actions": [
+        {
+          "id": "launch",
+          "title": { "zh": "启动", "en": "Launch" },
+          "key": "Enter"
+        },
+        {
+          "id": "reveal",
+          "title": { "zh": "打开所在文件夹", "en": "Reveal in folder" },
+          "key": "Ctrl+Enter"
+        },
+        {
+          "id": "open-panel",
+          "title": { "zh": "打开快捷面板", "en": "Open panel" },
+          "key": "Shift+Enter"
+        }
+      ],
+      "triggers": [
+        {
+          "files": {
+            "kind": "any",
+            "max": 20,
+            "title": {
+              "zh": "添加到快速启动面板",
+              "en": "Add to Quick Launch Panel"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "settings": [
+    {
+      "key": "popupHotkey",
+      "type": "hotkey",
+      "title": { "zh": "呼出快速启动面板快捷键", "en": "Popup panel hotkey" },
+      "hint": { "zh": "默认 Alt+1；清空可关闭全局快捷键，仍可用关键字 ql 或托盘菜单打开", "en": "Default Alt+1; clear to disable global hotkey" },
+      "default": "Alt+1"
+    },
+    {
+      "key": "hideOnBlur",
+      "type": "bool",
+      "title": { "zh": "失去焦点时自动隐藏", "en": "Hide when focus is lost" },
+      "default": true
+    },
+    {
+      "key": "hideAfterLaunch",
+      "type": "bool",
+      "title": { "zh": "启动程序后自动隐藏面板", "en": "Hide panel after launch" },
+      "default": true
+    },
+    {
+      "key": "singleClickLaunch",
+      "type": "bool",
+      "title": { "zh": "单击卡片直接启动（关闭则双击启动）", "en": "Single-click to launch (off = double-click)" },
+      "default": true
+    },
+    {
+      "key": "showAtCursor",
+      "type": "bool",
+      "title": { "zh": "呼出时跟随鼠标位置", "en": "Open near mouse pointer" },
+      "default": false
+    },
+    {
+      "key": "topMost",
+      "type": "bool",
+      "title": { "zh": "窗口置顶显示", "en": "Always on top" },
+      "default": true
+    },
+    {
+      "key": "viewMode",
+      "type": "choice",
+      "title": { "zh": "默认视图模式", "en": "Default view mode" },
+      "default": "grid",
+      "options": [
+        { "value": "grid", "title": { "zh": "图标网格", "en": "Icon grid" } },
+        { "value": "list", "title": { "zh": "紧凑列表", "en": "Compact list" } }
+      ]
+    },
+    {
+      "key": "tileSize",
+      "type": "choice",
+      "title": { "zh": "图标尺寸", "en": "Tile size" },
+      "default": "medium",
+      "options": [
+        { "value": "small", "title": { "zh": "小图标", "en": "Small" } },
+        { "value": "medium", "title": { "zh": "中等", "en": "Medium" } },
+        { "value": "large", "title": { "zh": "大图标", "en": "Large" } }
+      ]
+    }
+  ]
+}

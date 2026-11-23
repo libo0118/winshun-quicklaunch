@@ -1,0 +1,86 @@
+name: 构建并打包 Win顺 快速启动面板
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Windows x64 MSVC Release
+    runs-on: windows-2022
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 配置 Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 校验 plugin.json 清单
+        run: python -B ci/validate_manifest.py
+
+      - name: 缓存 Qt 6.12.0 SDK 归档
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/qt-sdk-cache
+          key: qt612-msvc-${{ hashFiles('ci/qt-sdk.json') }}
+
+      - name: 安装并校验 Qt 6.12.0 SDK
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check py7zr==1.1.4
+          python -B ci/install_qt.py --output "${{ runner.temp }}/qt612" --cache "${{ runner.temp }}/qt-sdk-cache" --github-env
+
+      - name: 编译 QuickLaunch 与单元测试
+        shell: pwsh
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File ci/build.ps1 -QtRoot "$env:QT_CMAKE_PREFIX" -Output "${{ runner.temp }}/build"
+
+      - name: 运行 C++20 单元测试
+        shell: pwsh
+        run: |
+          $env:PATH = "$env:QT_CMAKE_PREFIX\bin;$env:PATH"
+          $env:QT_PLUGIN_PATH = "$env:QT_CMAKE_PREFIX\plugins"
+          $env:QT_QPA_PLATFORM = "offscreen"
+          & "${{ runner.temp }}\build\quicklaunch_tests.exe"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: 运行真实 JSON-RPC 端到端测试
+        shell: pwsh
+        run: python -B ci/test_e2e.py --exe "${{ runner.temp }}/build/QuickLaunch.exe" --qt-dir "$env:QT_CMAKE_PREFIX"
+
+      - name: 打包 .wsplugin 与校验和
+        shell: pwsh
+        run: python -B ci/package.py --build "${{ runner.temp }}/build" --out dist
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-quicklaunch-windows-x64
+          path: |
+            dist/*.wsplugin
+            dist/*.sha256
+            dist/BUILD-INFO.json
+          if-no-files-found: error
+
+      - name: 校验版本号并发布 GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $expectedVersion = $tag.TrimStart("v")
+          $manifest = Get-Content -LiteralPath "plugin.json" -Raw -Encoding utf8 | ConvertFrom-Json
+          if ($manifest.version -ne $expectedVersion) {
+            throw "Tag version '$expectedVersion' mismatches plugin.json '$($manifest.version)'"
+          }
+          $assets = @(Get-ChildItem -Path "dist" -File | Where-Object { $_.Name -like "*.wsplugin" -or $_.Name -like "*.sha256" } | ForEach-Object { $_.FullName })
+          if ($assets.Count -lt 2) { throw "Expected .wsplugin and .sha256 in dist/" }
+          gh release create $tag @assets --title "$($manifest.id) $tag" --generate-notes
