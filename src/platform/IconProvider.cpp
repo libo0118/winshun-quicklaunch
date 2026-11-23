@@ -9,6 +9,7 @@
 
 #include <windows.h>
 #include <objbase.h>
+#include <commctrl.h>
 #include <commoncontrols.h>
 #include <shellapi.h>
 #include <shlobj.h>
