@@ -461,6 +461,21 @@ QString runFileDialog(IFileDialog* dlg, QWindow* owner, const QString& title,
     return QDir::toNativeSeparators(QString::fromWCharArray(pszPath.ptr));
 }
 
+void syncToolWindowStyle(QWindow* window, HWND hwnd)
+{
+    if (!window || !hwnd || !::IsWindow(hwnd))
+        return;
+    if ((window->flags() & Qt::WindowType_Mask) != Qt::Tool)
+        return;
+    const LONG_PTR exStyle = ::GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+    const LONG_PTR desired = (exStyle | WS_EX_TOOLWINDOW) & ~WS_EX_APPWINDOW;
+    if (desired != exStyle) {
+        ::SetWindowLongPtrW(hwnd, GWL_EXSTYLE, desired);
+        ::SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    }
+}
+
 } // namespace
 QString ShellBridge::pickOpenFile(
     QWindow* owner, const QString& title, const QString& filterName,
@@ -501,8 +516,9 @@ void ShellBridge::applyWindowChrome(QWindow* window, const ThemeData& theme)
     if (!window)
         return;
     const HWND hwnd = reinterpret_cast<HWND>(window->winId());
-    if (!hwnd)
+    if (!hwnd || !::IsWindow(hwnd))
         return;
+    syncToolWindowStyle(window, hwnd);
     const BOOL dark = theme.dark ? TRUE : FALSE;
     ::DwmSetWindowAttribute(hwnd, 20, &dark, sizeof(dark));
     const DWORD corner = theme.rounded ? 2 : 1;
@@ -558,10 +574,12 @@ void ShellBridge::activateWindow(QWindow* window)
 {
     if (!window)
         return;
+    if (const HWND preHwnd = reinterpret_cast<HWND>(window->winId()); preHwnd && ::IsWindow(preHwnd))
+        syncToolWindowStyle(window, preHwnd);
     if (!window->isVisible())
         window->show();
     const HWND hwnd = reinterpret_cast<HWND>(window->winId());
-    if (hwnd) {
+    if (hwnd && ::IsWindow(hwnd)) {
         ::ShowWindow(hwnd, SW_SHOW);
         ::SetForegroundWindow(hwnd);
     }

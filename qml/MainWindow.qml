@@ -11,7 +11,7 @@ ApplicationWindow {
     minimumHeight: 340
     color: theme.page
     title: "快速启动面板"
-    flags: Qt.Window | Qt.FramelessWindowHint | (controller.topMost ? Qt.WindowStaysOnTopHint : 0)
+    flags: (controller.standaloneMode ? Qt.Window : Qt.Tool) | Qt.FramelessWindowHint | (controller.topMost ? Qt.WindowStaysOnTopHint : 0)
     palette.window: theme.surface
     palette.windowText: theme.text
     palette.base: theme.control
