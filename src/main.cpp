@@ -92,6 +92,10 @@ int main(int argc, char* argv[])
         pending.prepend(firstLine);
     }
 
+    if (qEnvironmentVariableIsEmpty("QT_QUICK_BACKEND")) {
+        qputenv("QT_QUICK_BACKEND", "software");
+    }
+
     if (qEnvironmentVariableIsEmpty("QT_QUICK_CONTROLS_STYLE")) {
         qputenv("QT_QUICK_CONTROLS_STYLE", "Basic");
     }

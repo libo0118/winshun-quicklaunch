@@ -587,6 +587,15 @@ void ShellBridge::activateWindow(QWindow* window)
     window->requestActivate();
 }
 
+void ShellBridge::trimProcessWorkingSet()
+{
+    ::SetProcessWorkingSetSizeEx(
+        ::GetCurrentProcess(),
+        static_cast<SIZE_T>(-1),
+        static_cast<SIZE_T>(-1),
+        0);
+}
+
 bool ShellBridge::standaloneLaunch(
     const LaunchItem& item, const QString& dataDir, bool forceAdmin, QString* error)
 {

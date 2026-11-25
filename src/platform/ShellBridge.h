@@ -34,6 +34,7 @@ public:
     static void applyWindowChrome(QWindow* window, const ThemeData& theme);
     static void positionWindow(QWindow* window, bool nearCursor);
     static void activateWindow(QWindow* window);
+    static void trimProcessWorkingSet();
 
     static bool standaloneLaunch(const LaunchItem& item, const QString& dataDir, bool forceAdmin, QString* error);
     static bool standaloneReveal(const LaunchItem& item, QString* error);

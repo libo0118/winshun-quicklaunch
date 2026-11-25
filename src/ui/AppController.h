@@ -154,6 +154,7 @@ private:
     void initializeStorage(const QString& dataDir, bool hostHotkeys);
     void beginShutdown();
     bool ensureWindow();
+    void releaseIdleGraphicsResources();
     void refreshModels();
     void refreshItemFilter();
     void prewarmIcons();
@@ -207,6 +208,7 @@ private:
     bool m_userResized = false;
     QElapsedTimer m_lastShownTimer;
     QTimer* m_resizeSaveTimer = nullptr;
+    QTimer* m_idleTrimTimer = nullptr;
 };
 
 } // namespace ql

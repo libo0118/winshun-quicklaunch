@@ -83,6 +83,7 @@ AppController::AppController(Protocol* protocol, QString dataDir, bool standalon
     , m_categoryModel(new CategoryListModel(this))
     , m_itemModel(new LaunchItemModel(this))
     , m_resizeSaveTimer(new QTimer(this))
+    , m_idleTrimTimer(new QTimer(this))
 {
     m_resizeSaveTimer->setSingleShot(true);
     m_resizeSaveTimer->setInterval(250);
@@ -91,6 +92,9 @@ AppController::AppController(Protocol* protocol, QString dataDir, bool standalon
             m_store->saveWindowSize(m_windowWidth, m_windowHeight);
         }
     });
+    m_idleTrimTimer->setSingleShot(true);
+    m_idleTrimTimer->setInterval(2000);
+    connect(m_idleTrimTimer, &QTimer::timeout, this, &AppController::releaseIdleGraphicsResources);
     if (m_protocol) {
         connect(m_protocol, &Protocol::requested, this,
             [this](const QJsonValue& id, const QString& method, const QJsonObject& params) {
@@ -132,6 +136,9 @@ void AppController::beginShutdown()
     emit shuttingDownChanged();
     if (m_resizeSaveTimer && m_resizeSaveTimer->isActive()) {
         m_resizeSaveTimer->stop();
+    }
+    if (m_idleTrimTimer && m_idleTrimTimer->isActive()) {
+        m_idleTrimTimer->stop();
     }
     if (m_hotkeyService) {
         m_hotkeyService->releaseAll();
@@ -367,6 +374,9 @@ void AppController::setDialogOpen(bool open)
 }
 void AppController::showPopup()
 {
+    if (m_idleTrimTimer && m_idleTrimTimer->isActive()) {
+        m_idleTrimTimer->stop();
+    }
     if (!m_initialized && m_standaloneMode) {
         initializeStorage(m_dataDir, false);
     }
@@ -404,6 +414,30 @@ void AppController::hidePopup()
         setDialogOpen(false);
     }
     m_window->hide();
+    if (!m_standaloneMode && !m_shuttingDown && m_idleTrimTimer) {
+        m_idleTrimTimer->start();
+    }
+}
+
+void AppController::releaseIdleGraphicsResources()
+{
+    if (m_shuttingDown || m_standaloneMode) {
+        return;
+    }
+    if (m_window && m_window->isVisible()) {
+        return;
+    }
+    if (m_window) {
+        m_window->releaseResources();
+    }
+    if (m_engine) {
+        m_engine->collectGarbage();
+    }
+    QTimer::singleShot(150, this, [this]() {
+        if (!m_shuttingDown && (!m_window || !m_window->isVisible())) {
+            ShellBridge::trimProcessWorkingSet();
+        }
+    });
 }
 
 void AppController::togglePopup()
@@ -1225,9 +1259,9 @@ void AppController::handleInitialize(const QJsonValue& id, const QJsonObject& pa
         });
     }
 
-    QTimer::singleShot(350, this, [this]() {
-        if (!m_shuttingDown && !m_window && m_initialized) {
-            ensureWindow();
+    QTimer::singleShot(600, this, [this]() {
+        if (!m_shuttingDown && !m_window) {
+            ShellBridge::trimProcessWorkingSet();
         }
     });
 }
